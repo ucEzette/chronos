@@ -34,10 +34,9 @@ export declare namespace PayLock {
     price: BigNumberish;
     buyer: AddressLike;
     encryptedKey: string;
-    isSold: boolean;
-    isKeyDelivered: boolean;
-    listedAt: BigNumberish;
-    soldAt: BigNumberish;
+    maxSupply: BigNumberish;
+    soldCount: BigNumberish;
+    isSoldOut: boolean;
   };
 
   export type ItemStructOutput = [
@@ -50,10 +49,9 @@ export declare namespace PayLock {
     price: bigint,
     buyer: string,
     encryptedKey: string,
-    isSold: boolean,
-    isKeyDelivered: boolean,
-    listedAt: bigint,
-    soldAt: bigint
+    maxSupply: bigint,
+    soldCount: bigint,
+    isSoldOut: boolean
   ] & {
     id: bigint;
     seller: string;
@@ -64,10 +62,9 @@ export declare namespace PayLock {
     price: bigint;
     buyer: string;
     encryptedKey: string;
-    isSold: boolean;
-    isKeyDelivered: boolean;
-    listedAt: bigint;
-    soldAt: bigint;
+    maxSupply: bigint;
+    soldCount: bigint;
+    isSoldOut: boolean;
   };
 }
 
@@ -75,9 +72,11 @@ export interface PayLockInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "buyItem"
+      | "checkOwnership"
       | "deliverKey"
-      | "getItem"
+      | "deliveredKeys"
       | "getMarketplaceItems"
+      | "hasPurchased"
       | "items"
       | "listItem"
       | "owner"
@@ -98,21 +97,29 @@ export interface PayLockInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "deliverKey",
-    values: [BigNumberish, string]
+    functionFragment: "checkOwnership",
+    values: [BigNumberish, AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "getItem",
-    values: [BigNumberish]
+    functionFragment: "deliverKey",
+    values: [BigNumberish, AddressLike, string]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "deliveredKeys",
+    values: [BigNumberish, AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "getMarketplaceItems",
     values?: undefined
   ): string;
+  encodeFunctionData(
+    functionFragment: "hasPurchased",
+    values: [BigNumberish, AddressLike]
+  ): string;
   encodeFunctionData(functionFragment: "items", values: [BigNumberish]): string;
   encodeFunctionData(
     functionFragment: "listItem",
-    values: [string, string, string, string, BigNumberish]
+    values: [string, string, string, string, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
@@ -125,10 +132,21 @@ export interface PayLockInterface extends Interface {
   ): string;
 
   decodeFunctionResult(functionFragment: "buyItem", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "checkOwnership",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "deliverKey", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "getItem", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "deliveredKeys",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "getMarketplaceItems",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "hasPurchased",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "items", data: BytesLike): Result;
@@ -150,21 +168,21 @@ export namespace ItemListedEvent {
     seller: AddressLike,
     price: BigNumberish,
     name: string,
-    timestamp: BigNumberish
+    maxSupply: BigNumberish
   ];
   export type OutputTuple = [
     id: bigint,
     seller: string,
     price: bigint,
     name: string,
-    timestamp: bigint
+    maxSupply: bigint
   ];
   export interface OutputObject {
     id: bigint;
     seller: string;
     price: bigint;
     name: string;
-    timestamp: bigint;
+    maxSupply: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -173,16 +191,11 @@ export namespace ItemListedEvent {
 }
 
 export namespace ItemPurchasedEvent {
-  export type InputTuple = [
-    id: BigNumberish,
-    buyer: AddressLike,
-    timestamp: BigNumberish
-  ];
-  export type OutputTuple = [id: bigint, buyer: string, timestamp: bigint];
+  export type InputTuple = [id: BigNumberish, buyer: AddressLike];
+  export type OutputTuple = [id: bigint, buyer: string];
   export interface OutputObject {
     id: bigint;
     buyer: string;
-    timestamp: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -193,18 +206,14 @@ export namespace ItemPurchasedEvent {
 export namespace KeyDeliveredEvent {
   export type InputTuple = [
     id: BigNumberish,
-    encryptedKey: string,
-    timestamp: BigNumberish
+    buyer: AddressLike,
+    encryptedKey: string
   ];
-  export type OutputTuple = [
-    id: bigint,
-    encryptedKey: string,
-    timestamp: bigint
-  ];
+  export type OutputTuple = [id: bigint, buyer: string, encryptedKey: string];
   export interface OutputObject {
     id: bigint;
+    buyer: string;
     encryptedKey: string;
-    timestamp: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -270,21 +279,33 @@ export interface PayLock extends BaseContract {
 
   buyItem: TypedContractMethod<[_id: BigNumberish], [void], "payable">;
 
+  checkOwnership: TypedContractMethod<
+    [_id: BigNumberish, _user: AddressLike],
+    [[boolean, string] & { bought: boolean; key: string }],
+    "view"
+  >;
+
   deliverKey: TypedContractMethod<
-    [_id: BigNumberish, _keyForBuyer: string],
+    [_id: BigNumberish, _buyer: AddressLike, _keyForBuyer: string],
     [void],
     "nonpayable"
   >;
 
-  getItem: TypedContractMethod<
-    [_id: BigNumberish],
-    [PayLock.ItemStructOutput],
+  deliveredKeys: TypedContractMethod<
+    [arg0: BigNumberish, arg1: AddressLike],
+    [string],
     "view"
   >;
 
   getMarketplaceItems: TypedContractMethod<
     [],
     [PayLock.ItemStructOutput[]],
+    "view"
+  >;
+
+  hasPurchased: TypedContractMethod<
+    [arg0: BigNumberish, arg1: AddressLike],
+    [boolean],
     "view"
   >;
 
@@ -301,10 +322,9 @@ export interface PayLock extends BaseContract {
         bigint,
         string,
         string,
-        boolean,
-        boolean,
         bigint,
-        bigint
+        bigint,
+        boolean
       ] & {
         id: bigint;
         seller: string;
@@ -315,10 +335,9 @@ export interface PayLock extends BaseContract {
         price: bigint;
         buyer: string;
         encryptedKey: string;
-        isSold: boolean;
-        isKeyDelivered: boolean;
-        listedAt: bigint;
-        soldAt: bigint;
+        maxSupply: bigint;
+        soldCount: bigint;
+        isSoldOut: boolean;
       }
     ],
     "view"
@@ -330,7 +349,8 @@ export interface PayLock extends BaseContract {
       _ipfsCid: string,
       _previewCid: string,
       _fileType: string,
-      _price: BigNumberish
+      _price: BigNumberish,
+      _maxSupply: BigNumberish
     ],
     [void],
     "nonpayable"
@@ -354,22 +374,36 @@ export interface PayLock extends BaseContract {
     nameOrSignature: "buyItem"
   ): TypedContractMethod<[_id: BigNumberish], [void], "payable">;
   getFunction(
+    nameOrSignature: "checkOwnership"
+  ): TypedContractMethod<
+    [_id: BigNumberish, _user: AddressLike],
+    [[boolean, string] & { bought: boolean; key: string }],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "deliverKey"
   ): TypedContractMethod<
-    [_id: BigNumberish, _keyForBuyer: string],
+    [_id: BigNumberish, _buyer: AddressLike, _keyForBuyer: string],
     [void],
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "getItem"
+    nameOrSignature: "deliveredKeys"
   ): TypedContractMethod<
-    [_id: BigNumberish],
-    [PayLock.ItemStructOutput],
+    [arg0: BigNumberish, arg1: AddressLike],
+    [string],
     "view"
   >;
   getFunction(
     nameOrSignature: "getMarketplaceItems"
   ): TypedContractMethod<[], [PayLock.ItemStructOutput[]], "view">;
+  getFunction(
+    nameOrSignature: "hasPurchased"
+  ): TypedContractMethod<
+    [arg0: BigNumberish, arg1: AddressLike],
+    [boolean],
+    "view"
+  >;
   getFunction(
     nameOrSignature: "items"
   ): TypedContractMethod<
@@ -385,10 +419,9 @@ export interface PayLock extends BaseContract {
         bigint,
         string,
         string,
-        boolean,
-        boolean,
         bigint,
-        bigint
+        bigint,
+        boolean
       ] & {
         id: bigint;
         seller: string;
@@ -399,10 +432,9 @@ export interface PayLock extends BaseContract {
         price: bigint;
         buyer: string;
         encryptedKey: string;
-        isSold: boolean;
-        isKeyDelivered: boolean;
-        listedAt: bigint;
-        soldAt: bigint;
+        maxSupply: bigint;
+        soldCount: bigint;
+        isSoldOut: boolean;
       }
     ],
     "view"
@@ -415,7 +447,8 @@ export interface PayLock extends BaseContract {
       _ipfsCid: string,
       _previewCid: string,
       _fileType: string,
-      _price: BigNumberish
+      _price: BigNumberish,
+      _maxSupply: BigNumberish
     ],
     [void],
     "nonpayable"
@@ -471,7 +504,7 @@ export interface PayLock extends BaseContract {
       ItemListedEvent.OutputObject
     >;
 
-    "ItemPurchased(uint256,address,uint256)": TypedContractEvent<
+    "ItemPurchased(uint256,address)": TypedContractEvent<
       ItemPurchasedEvent.InputTuple,
       ItemPurchasedEvent.OutputTuple,
       ItemPurchasedEvent.OutputObject
@@ -482,7 +515,7 @@ export interface PayLock extends BaseContract {
       ItemPurchasedEvent.OutputObject
     >;
 
-    "KeyDelivered(uint256,string,uint256)": TypedContractEvent<
+    "KeyDelivered(uint256,address,string)": TypedContractEvent<
       KeyDeliveredEvent.InputTuple,
       KeyDeliveredEvent.OutputTuple,
       KeyDeliveredEvent.OutputObject

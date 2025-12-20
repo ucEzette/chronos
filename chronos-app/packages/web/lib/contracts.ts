@@ -67,32 +67,13 @@ export const PAYLOCK_ABI = [
     "type": "constructor"
   },
   {
-    "inputs": [
-      { "internalType": "address", "name": "owner", "type": "address" }
-    ],
-    "name": "OwnableInvalidOwner",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      { "internalType": "address", "name": "account", "type": "address" }
-    ],
-    "name": "OwnableUnauthorizedAccount",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "ReentrancyGuardReentrantCall",
-    "type": "error"
-  },
-  {
     "anonymous": false,
     "inputs": [
       { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
       { "indexed": true, "internalType": "address", "name": "seller", "type": "address" },
       { "indexed": false, "internalType": "uint256", "name": "price", "type": "uint256" },
       { "indexed": false, "internalType": "string", "name": "name", "type": "string" },
-      { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+      { "indexed": false, "internalType": "uint256", "name": "maxSupply", "type": "uint256" }
     ],
     "name": "ItemListed",
     "type": "event"
@@ -101,8 +82,7 @@ export const PAYLOCK_ABI = [
     "anonymous": false,
     "inputs": [
       { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
-      { "indexed": true, "internalType": "address", "name": "buyer", "type": "address" },
-      { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+      { "indexed": true, "internalType": "address", "name": "buyer", "type": "address" }
     ],
     "name": "ItemPurchased",
     "type": "event"
@@ -111,11 +91,25 @@ export const PAYLOCK_ABI = [
     "anonymous": false,
     "inputs": [
       { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
-      { "indexed": false, "internalType": "string", "name": "encryptedKey", "type": "string" },
-      { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+      { "indexed": true, "internalType": "address", "name": "buyer", "type": "address" },
+      { "indexed": false, "internalType": "string", "name": "encryptedKey", "type": "string" }
     ],
     "name": "KeyDelivered",
     "type": "event"
+  },
+  {
+    "inputs": [
+      { "internalType": "string", "name": "_name", "type": "string" },
+      { "internalType": "string", "name": "_ipfsCid", "type": "string" },
+      { "internalType": "string", "name": "_previewCid", "type": "string" },
+      { "internalType": "string", "name": "_fileType", "type": "string" },
+      { "internalType": "uint256", "name": "_price", "type": "uint256" },
+      { "internalType": "uint256", "name": "_maxSupply", "type": "uint256" }
+    ],
+    "name": "listItem",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
   },
   {
     "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
@@ -127,39 +121,12 @@ export const PAYLOCK_ABI = [
   {
     "inputs": [
       { "internalType": "uint256", "name": "_id", "type": "uint256" },
+      { "internalType": "address", "name": "_buyer", "type": "address" },
       { "internalType": "string", "name": "_keyForBuyer", "type": "string" }
     ],
     "name": "deliverKey",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
-    "name": "getItem",
-    "outputs": [
-      {
-        "components": [
-          { "internalType": "uint256", "name": "id", "type": "uint256" },
-          { "internalType": "address payable", "name": "seller", "type": "address" },
-          { "internalType": "string", "name": "name", "type": "string" },
-          { "internalType": "string", "name": "ipfsCid", "type": "string" },
-          { "internalType": "string", "name": "previewCid", "type": "string" },
-          { "internalType": "string", "name": "fileType", "type": "string" },
-          { "internalType": "uint256", "name": "price", "type": "uint256" },
-          { "internalType": "address", "name": "buyer", "type": "address" },
-          { "internalType": "string", "name": "encryptedKey", "type": "string" },
-          { "internalType": "bool", "name": "isSold", "type": "bool" },
-          { "internalType": "bool", "name": "isKeyDelivered", "type": "bool" },
-          { "internalType": "uint256", "name": "listedAt", "type": "uint256" },
-          { "internalType": "uint256", "name": "soldAt", "type": "uint256" }
-        ],
-        "internalType": "struct PayLock.Item",
-        "name": "",
-        "type": "tuple"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -177,10 +144,9 @@ export const PAYLOCK_ABI = [
           { "internalType": "uint256", "name": "price", "type": "uint256" },
           { "internalType": "address", "name": "buyer", "type": "address" },
           { "internalType": "string", "name": "encryptedKey", "type": "string" },
-          { "internalType": "bool", "name": "isSold", "type": "bool" },
-          { "internalType": "bool", "name": "isKeyDelivered", "type": "bool" },
-          { "internalType": "uint256", "name": "listedAt", "type": "uint256" },
-          { "internalType": "uint256", "name": "soldAt", "type": "uint256" }
+          { "internalType": "uint256", "name": "maxSupply", "type": "uint256" },
+          { "internalType": "uint256", "name": "soldCount", "type": "uint256" },
+          { "internalType": "bool", "name": "isSoldOut", "type": "bool" }
         ],
         "internalType": "struct PayLock.Item[]",
         "name": "",
@@ -192,15 +158,15 @@ export const PAYLOCK_ABI = [
   },
   {
     "inputs": [
-      { "internalType": "string", "name": "_name", "type": "string" },
-      { "internalType": "string", "name": "_ipfsCid", "type": "string" },
-      { "internalType": "string", "name": "_previewCid", "type": "string" },
-      { "internalType": "string", "name": "_fileType", "type": "string" },
-      { "internalType": "uint256", "name": "_price", "type": "uint256" }
+      { "internalType": "uint256", "name": "_id", "type": "uint256" },
+      { "internalType": "address", "name": "_user", "type": "address" }
     ],
-    "name": "listItem",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "name": "checkOwnership",
+    "outputs": [
+      { "internalType": "bool", "name": "bought", "type": "bool" },
+      { "internalType": "string", "name": "key", "type": "string" }
+    ],
+    "stateMutability": "view",
     "type": "function"
   }
 ] as const;

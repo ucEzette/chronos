@@ -9,23 +9,29 @@ contract PayLock is ReentrancyGuard, Ownable {
         uint256 id;
         address payable seller;
         string name;
-        string ipfsCid;       // The ENCRYPTED full file
-        string previewCid;    // The UNENCRYPTED preview (blurred img / short clip)
-        string fileType;      // "image", "video", "audio", "other"
+        string ipfsCid;
+        string previewCid;
+        string fileType;
         uint256 price;
-        address buyer;
-        string encryptedKey;
-        bool isSold;
-        bool isKeyDelivered;
-        uint256 listedAt;     // For history
-        uint256 soldAt;       // For history
+        address buyer; // Deprecated for multi-supply, used for logs
+        string encryptedKey; 
+        
+        // NEW FIELDS
+        uint256 maxSupply;
+        uint256 soldCount;
+        bool isSoldOut;
     }
 
     Item[] public items;
+    
+    // Track keys per buyer: itemId => buyerAddress => key
+    mapping(uint256 => mapping(address => string)) public deliveredKeys;
+    // Track if user bought it: itemId => buyerAddress => bool
+    mapping(uint256 => mapping(address => bool)) public hasPurchased;
 
-    event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 timestamp);
-    event ItemPurchased(uint256 indexed id, address indexed buyer, uint256 timestamp);
-    event KeyDelivered(uint256 indexed id, string encryptedKey, uint256 timestamp);
+    event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply);
+    event ItemPurchased(uint256 indexed id, address indexed buyer);
+    event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey);
 
     constructor() Ownable(msg.sender) {}
 
@@ -34,9 +40,11 @@ contract PayLock is ReentrancyGuard, Ownable {
         string calldata _ipfsCid, 
         string calldata _previewCid,
         string calldata _fileType,
-        uint256 _price
+        uint256 _price,
+        uint256 _maxSupply
     ) external nonReentrant {
         require(_price > 0, "Price must be > 0");
+        require(_maxSupply > 0, "Supply must be > 0");
         
         uint256 newId = items.length;
         items.push(Item({
@@ -49,36 +57,41 @@ contract PayLock is ReentrancyGuard, Ownable {
             price: _price,
             buyer: address(0),
             encryptedKey: "",
-            isSold: false,
-            isKeyDelivered: false,
-            listedAt: block.timestamp,
-            soldAt: 0
+            maxSupply: _maxSupply,
+            soldCount: 0,
+            isSoldOut: false
         }));
         
-        emit ItemListed(newId, msg.sender, _price, _name, block.timestamp);
+        emit ItemListed(newId, msg.sender, _price, _name, _maxSupply);
     }
 
     function buyItem(uint256 _id) external payable nonReentrant {
         Item storage item = items[_id];
-        require(!item.isSold, "Item already sold");
+        require(!item.isSoldOut, "Item is sold out");
+        require(item.soldCount < item.maxSupply, "Max supply reached");
         require(msg.value >= item.price, "Insufficient payment");
+        require(!hasPurchased[_id][msg.sender], "You already bought this");
         require(msg.sender != item.seller, "Cannot buy your own item");
 
-        item.buyer = msg.sender;
-        item.isSold = true;
-        item.soldAt = block.timestamp;
+        item.soldCount += 1;
+        if (item.soldCount >= item.maxSupply) {
+            item.isSoldOut = true;
+        }
+        
+        hasPurchased[_id][msg.sender] = true;
 
-        emit ItemPurchased(_id, msg.sender, block.timestamp);
+        emit ItemPurchased(_id, msg.sender);
     }
 
-    function deliverKey(uint256 _id, string calldata _keyForBuyer) external nonReentrant {
+    function deliverKey(uint256 _id, address _buyer, string calldata _keyForBuyer) external nonReentrant {
         Item storage item = items[_id];
-        
         require(msg.sender == item.seller, "Only seller can deliver");
-        require(item.isSold, "Item not sold yet");
-        require(!item.isKeyDelivered, "Key already delivered");
+        require(hasPurchased[_id][_buyer], "User has not purchased");
+        // Ensure key isn't already sent to this specific buyer
+        bytes memory existingKey = bytes(deliveredKeys[_id][_buyer]);
+        require(existingKey.length == 0, "Key already delivered to this buyer");
 
-        uint256 fee = item.price / 100; // 1% Fee
+        uint256 fee = item.price / 100; 
         uint256 sellerAmount = item.price - fee;
 
         (bool feeSuccess, ) = owner().call{value: fee}("");
@@ -87,18 +100,17 @@ contract PayLock is ReentrancyGuard, Ownable {
         (bool sellerSuccess, ) = item.seller.call{value: sellerAmount}("");
         require(sellerSuccess, "Seller transfer failed");
 
-        item.encryptedKey = _keyForBuyer;
-        item.isKeyDelivered = true;
+        deliveredKeys[_id][_buyer] = _keyForBuyer;
 
-        emit KeyDelivered(_id, _keyForBuyer, block.timestamp);
+        emit KeyDelivered(_id, _buyer, _keyForBuyer);
     }
 
     function getMarketplaceItems() external view returns (Item[] memory) {
         return items;
     }
-    
-    // Fetch specific item for Shareable Links
-    function getItem(uint256 _id) external view returns (Item memory) {
-        return items[_id];
+
+    // Helper to check if I own a specific item
+    function checkOwnership(uint256 _id, address _user) external view returns (bool bought, string memory key) {
+        return (hasPurchased[_id][_user], deliveredKeys[_id][_user]);
     }
 }
