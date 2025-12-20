@@ -31,8 +31,8 @@ export default defineConfig({
     sepolia: {
       type: "http",
       chainType: "l1",
-      url: configVariable("SEPOLIA_RPC_URL"),
-      accounts: [configVariable("SEPOLIA_PRIVATE_KEY")],
+      url: configVariable("https://services.datahaven-testnet.network/testnet"),
+      accounts: [configVariable("0x8acc41ebed511be8adc70b44e493abc9d2c74598cc0acc86ddb937c0046ab244")],
     },
   },
 });
