@@ -1,72 +1,166 @@
 "use client";
 
-import { useParams } from 'next/navigation';
-import { useReadContract, useConnect, useAccount } from 'wagmi';
-import { PAYLOCK_ABI, PAYLOCK_ADDRESS } from '@/lib/contracts';
-import { Providers } from '@/components/Providers';
-import { Loader2, AlertTriangle, ShieldCheck, Wallet } from 'lucide-react';
+import { useReadContract, useAccount, useWriteContract } from 'wagmi';
 import { formatEther } from 'viem';
+import { PAYLOCK_ABI, PAYLOCK_ADDRESS } from '@/lib/contracts';
+import { Loader2, Lock, Download, CheckCircle, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
-function ItemView() {
-  const params = useParams();
-  const { id } = params;
-  const { isConnected } = useAccount();
-  const { connectors, connect } = useConnect();
+export default function ItemPage({ params }: { params: { id: string } }) {
+  const { address } = useAccount();
+  const { writeContractAsync } = useWriteContract();
+  const [status, setStatus] = useState("idle");
 
-  const { data: item, isLoading } = useReadContract({
+  // FIX: Fetch ALL items, then find the one matching the ID
+  const { data: items, isLoading } = useReadContract({
     address: PAYLOCK_ADDRESS,
     abi: PAYLOCK_ABI,
-    functionName: 'getItem',
-    args: [BigInt(id as string)],
+    functionName: 'getMarketplaceItems',
   });
 
-  if (isLoading) return <div className="min-h-screen bg-black text-white flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
+  // Find the specific item from the list
+  const item = items ? (items as any[]).find(i => i.id.toString() === params.id) : null;
+
+  // --- Logic Helpers ---
+  const isSeller = item && address && item.seller.toLowerCase() === address.toLowerCase();
   
-  if (!item) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Item not found.</div>;
+  // Safe check for "sold out" using the new supply fields
+  const soldCount = item ? Number(item.soldCount) : 0;
+  const maxSupply = item ? Number(item.maxSupply) : 0;
+  const isSoldOut = item ? (item.isSoldOut || soldCount >= maxSupply) : false;
 
-  const typedItem = item as any;
+  // Check Ownership Logic (Did I buy it?)
+  const { data: myOwnership } = useReadContract({
+    address: PAYLOCK_ADDRESS,
+    abi: PAYLOCK_ABI,
+    functionName: 'checkOwnership',
+    args: [BigInt(params.id), address as `0x${string}`],
+    query: { enabled: !!address && !!item && !isSeller }
+  });
 
-  return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6">
-      <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl">
-        <div className="flex items-center justify-center mb-6">
-          <div className="bg-blue-600/20 p-3 rounded-full text-blue-500">
-            <ShieldCheck size={32} />
-          </div>
-        </div>
+  const isBuyer = myOwnership?.[0] || false;
+  const myKey = myOwnership?.[1] || "";
+  const isDelivered = myKey.length > 0;
 
-        <h1 className="text-2xl font-bold text-center mb-2">{typedItem.name}</h1>
-        <div className="text-center text-muted mb-6">
-          Price: <span className="text-white font-bold">{formatEther(typedItem.price)} MOCK</span>
-        </div>
+  const handleBuy = async () => {
+    if (!item) return;
+    try {
+      setStatus("buying");
+      await writeContractAsync({
+        address: PAYLOCK_ADDRESS,
+        abi: PAYLOCK_ABI,
+        functionName: 'buyItem',
+        args: [item.id],
+        value: item.price,
+      });
+      setStatus("bought");
+    } catch (e) {
+      console.error(e);
+      setStatus("idle");
+    }
+  };
 
-        {/* Simplified Preview for Shared Link */}
-        {typedItem.previewCid && (
-           <div className="h-48 w-full bg-black rounded-lg overflow-hidden mb-6 relative">
-             <img src={`https://gateway.pinata.cloud/ipfs/${typedItem.previewCid}`} className="w-full h-full object-cover opacity-60 blur-sm" />
-             <div className="absolute inset-0 flex items-center justify-center font-bold text-sm">PREVIEW</div>
-           </div>
-        )}
-
-        {!isConnected ? (
-           <button onClick={() => connect({ connector: connectors[0] })} className="w-full bg-white text-black font-bold py-3 rounded-xl flex items-center justify-center gap-2">
-             <Wallet size={18} /> Connect to Buy
-           </button>
-        ) : (
-           <div className="text-center bg-zinc-800 py-3 rounded-xl text-sm text-zinc-400">
-             Go to main dashboard to complete purchase.
-           </div>
-        )}
-      </div>
-      <div className="mt-8 text-zinc-600 text-xs">Powered by Chronos PayLock</div>
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background text-white"><Loader2 className="animate-spin" size={40}/></div>;
+  
+  if (!item) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background text-white gap-4">
+      <AlertTriangle size={48} className="text-yellow-500"/>
+      <h1 className="text-2xl font-bold">Item Not Found</h1>
+      <Link href="/" className="text-primary hover:underline">Return Home</Link>
     </div>
   );
-}
 
-export default function Page() {
   return (
-    <Providers>
-      <ItemView />
-    </Providers>
+    <div className="min-h-screen bg-background text-white p-6 flex flex-col items-center">
+      <div className="w-full max-w-2xl">
+        <Link href="/" className="flex items-center gap-2 text-muted hover:text-white mb-6 transition-colors">
+          <ArrowLeft size={20} /> Back to Marketplace
+        </Link>
+
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-2xl">
+          {/* Header Preview */}
+          <div className="h-64 bg-black relative flex items-center justify-center overflow-hidden">
+             {item.previewCid ? (
+               <img src={`https://gateway.pinata.cloud/ipfs/${item.previewCid}`} className="w-full h-full object-cover opacity-80" />
+             ) : (
+               <div className="flex flex-col items-center text-zinc-600">
+                 <Lock size={64} />
+                 <p className="font-mono text-sm mt-4">ENCRYPTED CONTENT</p>
+               </div>
+             )}
+             
+             {isSoldOut && !isBuyer && (
+               <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                 <span className="text-red-500 font-bold text-3xl border-4 border-red-500 px-6 py-2 -rotate-12 rounded-lg">SOLD OUT</span>
+               </div>
+             )}
+          </div>
+
+          <div className="p-8 space-y-6">
+            <div>
+              <div className="flex justify-between items-start">
+                <h1 className="text-3xl font-bold">{item.name}</h1>
+                <span className="bg-primary/20 text-primary px-4 py-1.5 rounded-full font-mono font-bold text-lg">
+                  {formatEther(item.price)} MOCK
+                </span>
+              </div>
+              <p className="text-muted mt-2 font-mono text-sm">Seller: {item.seller}</p>
+              <div className="flex items-center gap-2 mt-2 text-xs font-bold text-zinc-500">
+                <span>Supply: {soldCount} / {maxSupply}</span>
+              </div>
+            </div>
+
+            <div className="h-px bg-white/10" />
+
+            {/* ACTION AREA */}
+            <div className="space-y-4">
+              {isSeller ? (
+                <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-center">
+                  <p className="text-blue-200 font-bold">You are the seller.</p>
+                  <p className="text-xs text-blue-300/70 mt-1">Manage deliveries from the main Dashboard.</p>
+                </div>
+              ) : isBuyer ? (
+                 isDelivered ? (
+                   <div className="bg-green-500/10 border border-green-500/20 p-6 rounded-xl space-y-4 animate-in fade-in">
+                      <div className="flex items-center gap-3 text-green-400 font-bold text-lg">
+                        <CheckCircle /> Purchase Complete
+                      </div>
+                      <div className="bg-black/40 p-3 rounded-lg">
+                        <p className="text-xs text-muted mb-1 uppercase font-bold">Decryption Key</p>
+                        <code className="break-all text-green-200 font-mono text-sm">{myKey}</code>
+                      </div>
+                      <a 
+                        href={`https://gateway.pinata.cloud/ipfs/${item.ipfsCid}`} 
+                        target="_blank"
+                        className="flex items-center justify-center gap-2 w-full py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl transition-all"
+                      >
+                        <Download size={20} /> Download Encrypted File
+                      </a>
+                   </div>
+                 ) : (
+                   <div className="bg-yellow-500/10 border border-yellow-500/20 p-6 rounded-xl text-center space-y-2">
+                     <p className="text-yellow-500 font-bold text-lg">Payment Successful</p>
+                     <p className="text-sm text-yellow-200/70">Waiting for seller to release the key. Check back soon.</p>
+                   </div>
+                 )
+              ) : (
+                <button
+                  onClick={handleBuy}
+                  disabled={status !== "idle" || isSoldOut}
+                  className={`w-full py-4 rounded-xl font-bold text-lg transition-all ${
+                    isSoldOut 
+                      ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" 
+                      : "bg-white text-black hover:bg-gray-200 shadow-lg shadow-white/10"
+                  }`}
+                >
+                  {status === "buying" ? "Confirming Transaction..." : isSoldOut ? "Sold Out" : "Buy Now"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
