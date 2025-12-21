@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-
-contract PayLock is ReentrancyGuard, Ownable {
+contract PayLock {
     struct Item {
         uint256 id;
         address payable seller;
@@ -13,104 +10,111 @@ contract PayLock is ReentrancyGuard, Ownable {
         string previewCid;
         string fileType;
         uint256 price;
-        address buyer; // Deprecated for multi-supply, used for logs
-        string encryptedKey; 
-        
-        // NEW FIELDS
         uint256 maxSupply;
         uint256 soldCount;
         bool isSoldOut;
     }
 
-    Item[] public items;
-    
-    // Track keys per buyer: itemId => buyerAddress => key
-    mapping(uint256 => mapping(address => string)) public deliveredKeys;
-    // Track if user bought it: itemId => buyerAddress => bool
-    mapping(uint256 => mapping(address => bool)) public hasPurchased;
+    // Mappings
+    mapping(uint256 => Item) public items;
+    // Map Item ID -> Buyer Address -> Encrypted Key
+    mapping(uint256 => mapping(address => string)) public buyerKeys;
+    // Map Item ID -> Buyer Address -> specific purchase status
+    mapping(uint256 => mapping(address => bool)) public hasBought;
 
+    uint256 public itemCount;
+
+    // Events
     event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply);
     event ItemPurchased(uint256 indexed id, address indexed buyer);
     event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey);
-
-    constructor() Ownable(msg.sender) {}
+    event ItemCanceled(uint256 indexed id, address indexed seller);
 
     function listItem(
-        string calldata _name, 
-        string calldata _ipfsCid, 
-        string calldata _previewCid,
-        string calldata _fileType,
+        string memory _name,
+        string memory _ipfsCid,
+        string memory _previewCid,
+        string memory _fileType,
         uint256 _price,
         uint256 _maxSupply
-    ) external nonReentrant {
-        require(_price > 0, "Price must be > 0");
+    ) public {
         require(_maxSupply > 0, "Supply must be > 0");
-        
-        uint256 newId = items.length;
-        items.push(Item({
-            id: newId,
-            seller: payable(msg.sender),
-            name: _name,
-            ipfsCid: _ipfsCid,
-            previewCid: _previewCid,
-            fileType: _fileType,
-            price: _price,
-            buyer: address(0),
-            encryptedKey: "",
-            maxSupply: _maxSupply,
-            soldCount: 0,
-            isSoldOut: false
-        }));
-        
-        emit ItemListed(newId, msg.sender, _price, _name, _maxSupply);
+
+        itemCount++;
+        items[itemCount] = Item(
+            itemCount,
+            payable(msg.sender),
+            _name,
+            _ipfsCid,
+            _previewCid,
+            _fileType,
+            _price,
+            _maxSupply,
+            0,
+            false
+        );
+
+        emit ItemListed(itemCount, msg.sender, _price, _name, _maxSupply);
     }
 
-    function buyItem(uint256 _id) external payable nonReentrant {
+    function buyItem(uint256 _id) public payable {
         Item storage item = items[_id];
+        require(_id > 0 && _id <= itemCount, "Item does not exist");
+        require(msg.value >= item.price, "Not enough ether");
         require(!item.isSoldOut, "Item is sold out");
         require(item.soldCount < item.maxSupply, "Max supply reached");
-        require(msg.value >= item.price, "Insufficient payment");
-        require(!hasPurchased[_id][msg.sender], "You already bought this");
-        require(msg.sender != item.seller, "Cannot buy your own item");
+        require(!hasBought[_id][msg.sender], "You already bought this");
 
-        item.soldCount += 1;
+        // 1. UPDATE STATE (Effects)
+        // We update the contract state BEFORE sending money to prevent reentrancy attacks
+        hasBought[_id][msg.sender] = true;
+        item.soldCount++;
+
+        // Auto-mark sold out if supply reached
         if (item.soldCount >= item.maxSupply) {
             item.isSoldOut = true;
         }
-        
-        hasPurchased[_id][msg.sender] = true;
+
+        // 2. SEND MONEY (Interactions)
+        // Using .call is the modern, secure way to transfer Ether
+        (bool success, ) = item.seller.call{value: msg.value}("");
+        require(success, "Transfer to seller failed");
 
         emit ItemPurchased(_id, msg.sender);
     }
 
-    function deliverKey(uint256 _id, address _buyer, string calldata _keyForBuyer) external nonReentrant {
+    function deliverKey(uint256 _id, address _buyer, string memory _keyForBuyer) public {
         Item storage item = items[_id];
         require(msg.sender == item.seller, "Only seller can deliver");
-        require(hasPurchased[_id][_buyer], "User has not purchased");
-        // Ensure key isn't already sent to this specific buyer
-        bytes memory existingKey = bytes(deliveredKeys[_id][_buyer]);
-        require(existingKey.length == 0, "Key already delivered to this buyer");
+        require(hasBought[_id][_buyer], "Address did not buy this item");
 
-        uint256 fee = item.price / 100; 
-        uint256 sellerAmount = item.price - fee;
-
-        (bool feeSuccess, ) = owner().call{value: fee}("");
-        require(feeSuccess, "Fee transfer failed");
-
-        (bool sellerSuccess, ) = item.seller.call{value: sellerAmount}("");
-        require(sellerSuccess, "Seller transfer failed");
-
-        deliveredKeys[_id][_buyer] = _keyForBuyer;
-
+        buyerKeys[_id][_buyer] = _keyForBuyer;
+        
         emit KeyDelivered(_id, _buyer, _keyForBuyer);
     }
 
-    function getMarketplaceItems() external view returns (Item[] memory) {
-        return items;
+    function cancelListing(uint256 _id) public {
+        Item storage item = items[_id];
+        require(msg.sender == item.seller, "Only seller can cancel");
+        require(!item.isSoldOut, "Already sold out");
+        
+        // Mark as sold out effectively cancels it
+        item.isSoldOut = true;
+        // Cap the supply at whatever was sold so far
+        item.maxSupply = item.soldCount;
+
+        emit ItemCanceled(_id, msg.sender);
     }
 
-    // Helper to check if I own a specific item
-    function checkOwnership(uint256 _id, address _user) external view returns (bool bought, string memory key) {
-        return (hasPurchased[_id][_user], deliveredKeys[_id][_user]);
+    function getMarketplaceItems() public view returns (Item[] memory) {
+        Item[] memory allItems = new Item[](itemCount);
+        for (uint256 i = 1; i <= itemCount; i++) {
+            allItems[i - 1] = items[i];
+        }
+        return allItems;
+    }
+
+    function checkOwnership(uint256 _id, address _user) public view returns (bool bought, string memory key) {
+        return (hasBought[_id][_user], buyerKeys[_id][_user]);
     }
 }

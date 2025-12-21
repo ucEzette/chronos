@@ -66,6 +66,7 @@ export const PAYLOCK_ABI = [
     "stateMutability": "nonpayable",
     "type": "constructor"
   },
+  // EVENTS
   {
     "anonymous": false,
     "inputs": [
@@ -97,6 +98,16 @@ export const PAYLOCK_ABI = [
     "name": "KeyDelivered",
     "type": "event"
   },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
+      { "indexed": true, "internalType": "address", "name": "seller", "type": "address" }
+    ],
+    "name": "ItemCanceled",
+    "type": "event"
+  },
+  // FUNCTIONS
   {
     "inputs": [
       { "internalType": "string", "name": "_name", "type": "string" },
@@ -130,6 +141,13 @@ export const PAYLOCK_ABI = [
     "type": "function"
   },
   {
+    "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
+    "name": "cancelListing",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "getMarketplaceItems",
     "outputs": [
@@ -142,8 +160,6 @@ export const PAYLOCK_ABI = [
           { "internalType": "string", "name": "previewCid", "type": "string" },
           { "internalType": "string", "name": "fileType", "type": "string" },
           { "internalType": "uint256", "name": "price", "type": "uint256" },
-          { "internalType": "address", "name": "buyer", "type": "address" },
-          { "internalType": "string", "name": "encryptedKey", "type": "string" },
           { "internalType": "uint256", "name": "maxSupply", "type": "uint256" },
           { "internalType": "uint256", "name": "soldCount", "type": "uint256" },
           { "internalType": "bool", "name": "isSoldOut", "type": "bool" }
