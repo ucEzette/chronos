@@ -1,13 +1,13 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
-import { Providers } from '../components/Providers'; // Import the new component
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { Providers } from "../components/Providers"; // Import the file you created above
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Chronos',
-  description: 'Master Your Past. Secure Your Future.',
+  title: "Chronos PayLock",
+  description: "Decentralized Digital Marketplace",
 };
 
 export default function RootLayout({
@@ -18,7 +18,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        {/* Wrap children with Providers to enable Wallet/Blockchain features */}
+        {/* CRITICAL FIX: Everything must be inside <Providers> */}
         <Providers>
           {children}
         </Providers>
