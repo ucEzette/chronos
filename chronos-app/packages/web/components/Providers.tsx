@@ -6,22 +6,23 @@ import { metaMask } from "wagmi/connectors";
 import { ReactNode } from "react";
 import { type Chain } from "viem";
 
-// 1. Define the DataHaven Testnet Chain
+// 1. Define DataHaven Testnet Chain
 const datahaven = {
   id: 55931,
   name: 'DataHaven Testnet',
-  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  nativeCurrency: { name: 'DataHaven Token', symbol: 'DH', decimals: 18 },
   rpcUrls: {
     default: { http: ['https://services.datahaven-testnet.network/testnet'] },
   },
   blockExplorers: {
     default: { name: 'DHScan', url: 'https://testnet.dhscan.io/' },
   },
+  testnet: true,
 } as const satisfies Chain;
 
-// 2. Configure Wagmi to use DataHaven
+// 2. Configure Wagmi
 export const config = createConfig({
-  chains: [datahaven], // Only allowing DataHaven ensures users connect to the right network
+  chains: [datahaven],
   connectors: [metaMask()],
   transports: {
     [datahaven.id]: http(),

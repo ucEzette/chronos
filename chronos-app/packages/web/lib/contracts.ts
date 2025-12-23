@@ -1,72 +1,16 @@
-// ==========================================
-// 1. CHRONOS VAULT (Time Capsules & Void)
-// ==========================================
-
-export const VAULT_ADDRESS = process.env.NEXT_PUBLIC_VAULT_CONTRACT_ADDRESS as `0x${string}`;
-
-export const VAULT_ABI = [
-  {
-    "inputs": [
-      { "internalType": "string", "name": "_ipfsCid", "type": "string" },
-      { "internalType": "bytes", "name": "_encryptedKey", "type": "bytes" },
-      { "internalType": "uint256", "name": "_unlockTime", "type": "uint256" }
-    ],
-    "name": "createCapsule",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
-    "name": "signalVoid",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
-    "name": "getCapsule",
-    "outputs": [
-      {
-        "components": [
-          { "internalType": "uint256", "name": "id", "type": "uint256" },
-          { "internalType": "string", "name": "ipfsCid", "type": "string" },
-          { "internalType": "bytes", "name": "encryptedKey", "type": "bytes" },
-          { "internalType": "uint256", "name": "unlockTime", "type": "uint256" },
-          { "internalType": "address", "name": "owner", "type": "address" },
-          { "internalType": "bool", "name": "isClaimed", "type": "bool" }
-        ],
-        "internalType": "struct ChronosVault.Capsule",
-        "name": "",
-        "type": "tuple"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "getMyCapsules",
-    "outputs": [{ "internalType": "uint256[]", "name": "", "type": "uint256[]" }],
-    "stateMutability": "view",
-    "type": "function"
-  }
-] as const;
-
-
-// ==========================================
-// 2. PAYLOCK PROTOCOL (Data Vending)
-// ==========================================
-
 export const PAYLOCK_ADDRESS = process.env.NEXT_PUBLIC_PAYLOCK_ADDRESS as `0x${string}`;
 
 export const PAYLOCK_ABI = [
+  // Events
   {
-    "inputs": [],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
+      { "indexed": true, "internalType": "address", "name": "seller", "type": "address" }
+    ],
+    "name": "ItemCanceled",
+    "type": "event"
   },
-  // EVENTS
   {
     "anonymous": false,
     "inputs": [
@@ -98,16 +42,7 @@ export const PAYLOCK_ABI = [
     "name": "KeyDelivered",
     "type": "event"
   },
-  {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
-      { "indexed": true, "internalType": "address", "name": "seller", "type": "address" }
-    ],
-    "name": "ItemCanceled",
-    "type": "event"
-  },
-  // FUNCTIONS
+  // Functions
   {
     "inputs": [
       { "internalType": "string", "name": "_name", "type": "string" },

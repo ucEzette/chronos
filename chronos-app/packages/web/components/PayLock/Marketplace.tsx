@@ -1,21 +1,17 @@
 "use client";
 
+// FIX: Added 'useAccount' to the imports below
 import { useReadContract, useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { formatEther } from 'viem';
 import { PAYLOCK_ABI, PAYLOCK_ADDRESS } from '@/lib/contracts';
 import { useState, useEffect } from 'react';
-import { Loader2, Search, Play, Rotate3d, Code, FileText, Activity, ShoppingCart, ShieldCheck } from 'lucide-react';
+import { Loader2, Search, Play, Box, Code, FileText, Music, ShoppingCart, Info, ChevronUp, Film, Mic, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-/**
- * CHRONOS MARKETPLACE
- * Improved with persistent data recovery and merchant lifecycle integration.
- */
 export function Marketplace() {
   const [activeTab, setActiveTab] = useState<'active' | 'sold'>('active');
   const [search, setSearch] = useState("");
 
-  // RESTORE DATA: Direct contract synchronization
   const { data: items, isLoading, refetch } = useReadContract({
     address: PAYLOCK_ADDRESS,
     abi: PAYLOCK_ABI,
@@ -25,223 +21,177 @@ export function Marketplace() {
   const allItems = (items as any[]) || [];
   
   const filtered = allItems.filter(i => {
-    // Logic to determine availability
-    const isSoldOut = i.isSoldOut || Number(i.soldCount) >= Number(i.maxSupply);
-    const matchesSearch = i.name.toLowerCase().includes(search.toLowerCase()) || 
-                         i.ipfsCid.toLowerCase().includes(search.toLowerCase());
+    // Strict check for sold out status
+    const isSoldOut = i.isSoldOut || (Number(i.maxSupply) > 0 && Number(i.soldCount) >= Number(i.maxSupply));
+    const matchesSearch = i.name.toLowerCase().includes(search.toLowerCase());
     
-    return activeTab === 'active' ? (!isSoldOut && matchesSearch) : (isSoldOut && matchesSearch);
+    if (activeTab === 'active') return !isSoldOut && matchesSearch;
+    if (activeTab === 'sold') return isSoldOut && matchesSearch;
+    return matchesSearch;
   });
 
   return (
     <div className="w-full flex flex-col gap-8 font-display">
-      {/* Header Info & Search Section */}
       <div className="flex flex-col md:flex-row justify-between items-end gap-6 pb-4 border-b border-white/10">
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-[#00E5FF] text-xs font-mono tracking-widest uppercase">
-            <span className="size-2 bg-[#00E5FF] rounded-full animate-pulse shadow-[0_0_8px_#00E5FF]"></span>
+          <div className="flex items-center gap-2 text-primary text-xs font-mono tracking-widest uppercase">
+            <span className="size-2 bg-primary rounded-full animate-pulse shadow-[0_0_8px_#40E0D0]"></span>
             System Online // V.2.0.77
           </div>
           <h1 className="text-4xl md:text-5xl font-black text-white leading-tight tracking-tighter uppercase">
-            Encrypted <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#00E5FF] to-[#14b8a6]">Chronicles</span>
+            Encrypted <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-cyan-600">Chronicles</span>
           </h1>
-          <p className="text-white/60 max-w-lg text-sm font-mono uppercase tracking-tighter">
-            Acquire rare data fragments and media logs anonymously via P2P protocol.
-          </p>
         </div>
 
-        {/* Tab Control */}
-        <div className="flex items-center gap-1 bg-white/5 p-1 rounded-full border border-white/10 shadow-inner">
-          <button 
-            onClick={() => setActiveTab('active')} 
-            className={cn(
-              "px-6 py-2 rounded-full text-[10px] font-black uppercase transition-all", 
-              activeTab === 'active' ? "bg-[#00E5FF] text-black shadow-neon" : "text-white/60 hover:text-white"
-            )}
-          >
-            Active Market
-          </button>
-          <button 
-            onClick={() => setActiveTab('sold')} 
-            className={cn(
-              "px-6 py-2 rounded-full text-[10px] font-black uppercase transition-all", 
-              activeTab === 'sold' ? "bg-[#00E5FF] text-black shadow-neon" : "text-white/60 hover:text-white"
-            )}
-          >
-            Sold History
-          </button>
-        </div>
-
-        {/* Search Input */}
-        <div className="relative flex-1 md:flex-none group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-white/40 group-focus-within:text-[#00E5FF] transition-colors" />
-          <input 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full md:w-64 pl-10 pr-3 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-[#00E5FF] outline-none transition-all font-mono text-xs" 
-            placeholder="Search hash node..." 
-          />
+        <div className="flex flex-col md:flex-row gap-4 items-end w-full md:w-auto">
+          <div className="relative group w-full md:w-auto">
+             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-primary transition-colors size-4"/>
+             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter artifacts..." className="w-full md:w-64 bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white focus:border-primary outline-none transition-colors font-mono"/>
+          </div>
+          <div className="flex gap-1 bg-white/5 p-1 rounded-full border border-white/10">
+            <button onClick={() => setActiveTab('active')} className={cn("px-6 py-2 rounded-full text-[10px] font-black uppercase transition-all", activeTab === 'active' ? "bg-primary text-black shadow-glow-primary" : "text-white/60 hover:text-white")}>Active Market</button>
+            <button onClick={() => setActiveTab('sold')} className={cn("px-6 py-2 rounded-full text-[10px] font-black uppercase transition-all", activeTab === 'sold' ? "bg-primary text-black shadow-glow-primary" : "text-white/60 hover:text-white")}>Sold Out</button>
+          </div>
         </div>
       </div>
 
-      {/* Item Grid */}
       {isLoading ? (
-        <div className="py-40 flex flex-col items-center justify-center gap-4">
-          <Loader2 className="animate-spin text-[#00E5FF]" size={48} />
-          <span className="text-xs font-mono text-[#00E5FF] animate-pulse uppercase tracking-widest">Scanning Network Nodes...</span>
-        </div>
-      ) : filtered.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
-          {filtered.map(item => (
-            <MarketItem key={item.id.toString()} item={item} onPurchaseSuccess={refetch} />
-          ))}
+        <div className="py-40 text-center flex flex-col items-center gap-4">
+          <Loader2 className="animate-spin text-primary" size={48} />
+          <p className="text-primary font-mono text-xs uppercase tracking-widest animate-pulse">Scanning Network...</p>
         </div>
       ) : (
-        <div className="py-40 text-center border border-dashed border-white/10 rounded-2xl bg-white/5 mx-auto w-full">
-          <p className="text-white/40 font-mono italic uppercase text-xs tracking-widest">
-            No matching encrypted fragments detected in this sector.
-          </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
+          {filtered.map(item => <MarketItem key={item.id.toString()} item={item} onSuccess={refetch} />)}
+          {filtered.length === 0 && <div className="col-span-full py-20 text-center text-white/40 font-mono italic uppercase">No artifacts found in this sector.</div>}
         </div>
       )}
     </div>
   );
 }
 
-function MarketItem({ item, onPurchaseSuccess }: { item: any, onPurchaseSuccess: () => void }) {
-  const { address } = useAccount();
+function MarketItem({ item, onSuccess }: { item: any, onSuccess: () => void }) {
+  const { address } = useAccount(); // This will now work
   const { writeContractAsync, data: hash } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
   
-  // Track on-chain transaction receipt
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
+  const [meta, setMeta] = useState<{ desc: string, img: string, blur: number, zoom: number } | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
-  // Update Marketplace state after successful acquisition
+  // Calculate Sold Out Status
+  const isSoldOut = item.isSoldOut || (Number(item.maxSupply) > 0 && Number(item.soldCount) >= Number(item.maxSupply));
+
+  useEffect(() => { if (isSuccess) onSuccess(); }, [isSuccess, onSuccess]);
+
   useEffect(() => {
-    if (isConfirmed) onPurchaseSuccess();
-  }, [isConfirmed, onPurchaseSuccess]);
+    const fetchMeta = async () => {
+      const cid = item.previewCid?.replace("ipfs://", "");
+      if (!cid) return;
+      try {
+        const res = await fetch(`https://gateway.pinata.cloud/ipfs/${cid}`);
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const json = await res.json();
+          setMeta({
+            desc: json.description || "",
+            img: json.image?.replace("ipfs://", "") || "",
+            blur: json.settings?.blur || 0,
+            zoom: json.settings?.zoom || 100
+          });
+        } else {
+          setMeta({ desc: "", img: cid, blur: 0, zoom: 100 });
+        }
+      } catch (e) { setMeta({ desc: "", img: cid, blur: 0, zoom: 100 }); }
+    };
+    fetchMeta();
+  }, [item.previewCid]);
 
-  const itemId = BigInt(item.id);
-  const isSoldOut = item.isSoldOut || Number(item.soldCount) >= Number(item.maxSupply);
-  const isSeller = address?.toLowerCase() === item.seller.toLowerCase();
-
-  /**
-   * PURCHASE FUNCTION
-   * Connects to CHRONOS Uplink to transfer ownership.
-   */
   const handleBuy = async () => {
-    if (!address) return;
+    if (isSoldOut) return;
     try {
-      await writeContractAsync({
-        address: PAYLOCK_ADDRESS,
-        abi: PAYLOCK_ABI,
-        functionName: 'buyItem',
-        args: [itemId],
-        value: item.price,
-      });
-    } catch (e) {
-      console.error("Uplink Aborted:", e);
-    }
+      await writeContractAsync({ address: PAYLOCK_ADDRESS, abi: PAYLOCK_ABI, functionName: 'buyItem', args: [BigInt(item.id)], value: item.price });
+    } catch (e) { console.error(e); }
   };
 
-  const getFileIcon = (type: string) => {
-    switch(type.toLowerCase()) {
-      case 'audio': return <Activity className="size-3.5 mr-1" />;
-      case 'video': return <Play className="size-3.5 mr-1" />;
-      case 'model': return <Rotate3d className="size-3.5 mr-1" />;
-      case 'script': return <Code className="size-3.5 mr-1" />;
-      default: return <FileText className="size-3.5 mr-1" />;
-    }
+  const getIcon = (type: string) => {
+    const t = type.toUpperCase();
+    if (t.includes('AUDIO') || t.includes('MP3')) return <Music size={14} className="mr-1"/>;
+    if (t.includes('VIDEO') || t.includes('MP4')) return <Film size={14} className="mr-1"/>;
+    if (t.includes('PDF')) return <FileText size={14} className="mr-1"/>;
+    return <Code size={14} className="mr-1"/>;
   };
+
+  const isVideo = item.fileType.toUpperCase().includes('VIDEO');
+  const isAudio = item.fileType.toUpperCase().includes('AUDIO');
 
   return (
-    <div className={cn(
-      "group relative bg-[#08161f]/50 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-[0_0_30px_rgba(0,229,255,0.15)] hover:-translate-y-1",
-      isSoldOut && "grayscale opacity-70"
-    )}>
-      {/* Type Badge */}
-      <div className="absolute top-3 right-3 z-20">
-        <span className="inline-flex items-center rounded-full bg-black/60 backdrop-blur-sm px-2.5 py-0.5 text-[10px] font-bold text-[#00E5FF] border border-[#00E5FF]/30 uppercase font-mono tracking-wider">
-          {getFileIcon(item.fileType)}
-          {item.fileType}
+    <div className={cn("group relative bg-[#0b1a24]/60 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-1", 
+      isSoldOut ? "opacity-75 grayscale hover:grayscale-0 hover:opacity-100 border-white/5" : "hover:border-primary/50 hover:shadow-[0_0_30px_rgba(64,224,208,0.15)]")}>
+      
+      {/* Badges */}
+      <div className="absolute top-3 right-3 z-20 flex gap-2">
+        <span className="inline-flex items-center rounded-full bg-black/60 backdrop-blur-sm px-2.5 py-0.5 text-[10px] font-bold text-primary border border-primary/30 uppercase tracking-wide">
+          {getIcon(item.fileType)} {item.fileType}
         </span>
-      </div>
-
-      {/* Preview Section */}
-      <div className="relative aspect-video w-full overflow-hidden bg-gray-900">
-        <img 
-          src={`https://gateway.pinata.cloud/ipfs/${item.previewCid}`} 
-          className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-500" 
-          alt={item.name}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#020609] via-transparent to-transparent" />
-        
-        {/* Equalizer animation for Audio items */}
-        {item.fileType.toLowerCase() === 'audio' && (
-          <div className="absolute bottom-0 left-0 right-0 h-16 flex items-end justify-center gap-1 pb-4 px-4">
-            {[30, 50, 80, 40, 60, 90, 45, 20].map((h, i) => (
-              <div key={i} className="bar w-1 bg-[#00E5FF] rounded-full animate-pulse" style={{ height: `${h}%`, animationDelay: `${i * -0.2}s` }}></div>
-            ))}
-          </div>
-        )}
-
         {isSoldOut && (
-          <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
-            <div className="border-4 border-white text-white px-6 py-2 text-2xl font-black uppercase transform -rotate-12 bg-[#00E5FF]/20 backdrop-blur-sm shadow-neon">
-              SOLD OUT
-            </div>
-          </div>
+          <span className="inline-flex items-center rounded-full bg-red-500/80 backdrop-blur-sm px-2.5 py-0.5 text-[10px] font-bold text-white border border-red-500/50 uppercase tracking-wide shadow-lg">
+            SOLD OUT
+          </span>
         )}
       </div>
 
-      {/* Info Section */}
+      {/* SOLD OUT OVERLAY */}
+      {isSoldOut && (
+        <div className="absolute inset-0 z-10 bg-black/40 flex items-center justify-center pointer-events-none">
+          <div className="border-2 border-white/80 text-white px-4 py-1 text-xl font-black tracking-widest uppercase transform -rotate-12 bg-black/50 backdrop-blur-sm">
+            SOLD OUT
+          </div>
+        </div>
+      )}
+
+      {/* Media Preview */}
+      <div className="relative aspect-video w-full overflow-hidden bg-gray-900 flex items-center justify-center">
+        {meta ? (
+          isVideo ? (
+            <video src={`https://gateway.pinata.cloud/ipfs/${meta.img}`} controls className="w-full h-full object-cover" style={{ filter: `blur(${meta.blur}px)`, transform: `scale(${meta.zoom/100})` }}/>
+          ) : isAudio ? (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-black p-4 relative"><Mic size={32} className="text-primary" /></div>
+          ) : (
+            <img src={`https://gateway.pinata.cloud/ipfs/${meta.img}`} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all duration-500" style={{ filter: `blur(${meta.blur}px)`, transform: `scale(${meta.zoom/100})` }} onError={(e) => (e.target as HTMLImageElement).src = "https://placehold.co/600x400/000/FFF?text=ENCRYPTED"}/>
+          )
+        ) : <div className="w-full h-full bg-black/50 animate-pulse" />}
+        {!isVideo && !isAudio && <div className="absolute inset-0 bg-gradient-to-t from-[#020609] via-transparent to-transparent opacity-80"></div>}
+      </div>
+
       <div className="p-5 flex flex-col gap-4">
         <div>
-          <h3 className="text-lg font-bold text-white group-hover:text-[#00E5FF] transition-colors truncate font-mono uppercase">
-            {item.name}
-          </h3>
+          <div className="flex justify-between items-start">
+             <h3 className={cn("text-lg font-bold text-white transition-colors truncate font-mono uppercase", !isSoldOut && "group-hover:text-primary")}>{item.name}</h3>
+             {meta?.desc && <button onClick={() => setExpanded(!expanded)} className="text-white/40 hover:text-primary transition-colors">{expanded ? <ChevronUp size={16}/> : <Info size={16}/>}</button>}
+          </div>
           <p className="text-white/50 text-[10px] font-mono mt-1 uppercase tracking-tighter">
-            {item.ipfsCid.slice(0, 16)}... // SUPPLY: {Number(item.soldCount)}/{Number(item.maxSupply)}
+            ID: #{item.id.toString()} // SUPPLY: {Number(item.soldCount)}/{Number(item.maxSupply)}
           </p>
         </div>
 
+        {expanded && meta?.desc && <div className="text-xs text-gray-300 font-sans leading-relaxed bg-white/5 p-3 rounded-lg border border-white/5 animate-in slide-in-from-top-2">{meta.desc}</div>}
+
         <div className="flex items-center justify-between border-t border-white/10 pt-4">
           <div className="flex flex-col">
-            <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Cost</span>
-            <span className="text-lg font-bold text-white font-mono">{formatEther(item.price)} MOCK</span>
+            <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Price</span>
+            <span className="text-lg font-bold text-white font-mono">{formatEther(item.price)} ETH</span>
           </div>
-
-          {!isSeller && (
+          {address?.toLowerCase() !== item.seller.toLowerCase() && (
             <button 
-              onClick={handleBuy}
-              disabled={isSoldOut || isConfirming || isConfirmed}
-              className={cn(
-                "px-6 py-2 rounded-full text-[10px] font-black uppercase transition-all flex items-center gap-2",
-                isSoldOut || isConfirmed
-                  ? "bg-white/5 text-white/20 border border-white/10 cursor-not-allowed" 
-                  : "bg-[#00E5FF] hover:bg-cyan-300 text-black shadow-neon active:scale-95"
+              onClick={handleBuy} 
+              disabled={isConfirming || isSoldOut} 
+              className={cn("px-5 py-2 rounded-full font-bold text-[10px] uppercase flex items-center gap-2 transition-all shadow-glow-primary", 
+                isSoldOut ? "bg-white/10 text-white/40 cursor-not-allowed border border-white/5 shadow-none" : "bg-primary hover:bg-teal-400 text-black hover:scale-105"
               )}
             >
-              {isConfirming ? (
-                <>
-                  <Loader2 className="animate-spin size-3" />
-                  UPLINKING...
-                </>
-              ) : isConfirmed ? (
-                <>
-                  <ShieldCheck size={14} />
-                  ACQUIRED
-                </>
-              ) : isSoldOut ? (
-                "UNAVAILABLE"
-              ) : (
-                <><ShoppingCart size={14} /> BUY NOW</>
-              )}
+              {isConfirming ? <Loader2 className="animate-spin" size={14} /> : isSoldOut ? <Ban size={14}/> : <ShoppingCart size={14} />} 
+              {isConfirming ? "Processing..." : isSoldOut ? "Sold Out" : "Buy Now"}
             </button>
-          )}
-
-          {isSeller && (
-            <div className="text-[10px] font-mono text-[#14b8a6] border border-[#14b8a6]/30 bg-[#14b8a6]/10 px-3 py-1 rounded-full uppercase font-bold">
-              Your Listing
-            </div>
           )}
         </div>
       </div>
