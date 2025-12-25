@@ -17,7 +17,7 @@ import {
   Lock, EyeOff, Shield
 } from "lucide-react";
 
-// ... [Keep AvatarModal Component Exactly as Before] ...
+// --- COMPONENT: AVATAR MODAL ---
 function AvatarModal({ isOpen, onClose, onSelect }: { isOpen: boolean, onClose: () => void, onSelect: (url: string) => void }) {
   const [activeTab, setActiveTab] = useState<'GENERATIVE' | 'UPLOAD'>('GENERATIVE');
   const [uploading, setUploading] = useState(false);
@@ -39,8 +39,8 @@ function AvatarModal({ isOpen, onClose, onSelect }: { isOpen: boolean, onClose: 
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"><X size={20}/></button>
         <div className="p-6 border-b border-white/5 bg-white/5"><h3 className="text-xl font-bold text-white uppercase tracking-wide flex items-center gap-2"><Camera size={20} className="text-primary"/> Identity Module</h3></div>
         <div className="flex border-b border-white/5">
-          <button onClick={() => setActiveTab('GENERATIVE')} className={cn("flex-1 py-4 text-xs font-bold uppercase tracking-wider transition-colors", activeTab === 'GENERATIVE' ? "bg-white/5 text-primary border-b-2 border-primary" : "text-gray-500 hover:text-white")}>Generative Warriors</button>
-          <button onClick={() => setActiveTab('UPLOAD')} className={cn("flex-1 py-4 text-xs font-bold uppercase tracking-wider transition-colors", activeTab === 'UPLOAD' ? "bg-white/5 text-primary border-b-2 border-primary" : "text-gray-500 hover:text-white")}>Custom Upload</button>
+          <button onClick={() => setActiveTab('GENERATIVE')} className={cn("flex-1 py-4 text-xs font-bold uppercase tracking-wider transition-colors", activeTab === 'GENERATIVE' ? "bg-white/5 text-primary border-b-2 border-primary" : "text-gray-500 hover:text-white")}>Generative</button>
+          <button onClick={() => setActiveTab('UPLOAD')} className={cn("flex-1 py-4 text-xs font-bold uppercase tracking-wider transition-colors", activeTab === 'UPLOAD' ? "bg-white/5 text-primary border-b-2 border-primary" : "text-gray-500 hover:text-white")}>Upload</button>
         </div>
         <div className="p-6 min-h-[300px] bg-[#020e14]">
           {activeTab === 'GENERATIVE' ? (
@@ -56,7 +56,7 @@ function AvatarModal({ isOpen, onClose, onSelect }: { isOpen: boolean, onClose: 
   );
 }
 
-// ... [Keep InventoryItem Component Exactly as Before] ...
+// --- INVENTORY ITEM ---
 function InventoryItem({ item, onDecrypt }: { item: any, onDecrypt: (item: any) => void }) {
   const [meta, setMeta] = useState<{ name: string, type: string, image: string } | null>(null);
   useEffect(() => {
@@ -116,44 +116,31 @@ export default function ProfilePage() {
   });
 
   const [activeTab, setActiveTab] = useState<'INVENTORY' | 'TRANSACTIONS' | 'SETTINGS'>('INVENTORY');
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [loadingTx, setLoadingTx] = useState(false);
   const [settings, setSettings] = useState({ autoDecrypt: false, ghostMode: false, displayName: "", avatarUrl: "", twitterHandle: "" });
+  const [reputation, setReputation] = useState(50);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [verifyingTwitter, setVerifyingTwitter] = useState(false);
-  const [reputation, setReputation] = useState(50); // Default score
 
-  // 1. REPUTATION ALGORITHM
+  // Reputation Calc
   useEffect(() => {
     if (!publicClient || !profileAddress) return;
     const calculateReputation = async () => {
       try {
         const fromBlock = BigInt(0);
-        // We need logs where this user was the SELLER
-        // Since 'ItemPurchased' only indexes ID and Buyer, we have to filter manually or rely on 'ItemListed'
-        // Simplified Logic: 
-        // +5 points for every successful sale (ownership transfer)
-        // -10 points for every cancellation
-        
         const [purchases, cancels] = await Promise.all([
             publicClient.getLogs({ address: PAYLOCK_ADDRESS, event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), fromBlock }),
             publicClient.getLogs({ address: PAYLOCK_ADDRESS, event: parseAbiItem('event ItemCanceled(uint256 indexed id, address indexed seller)'), args: { seller: profileAddress as `0x${string}` }, fromBlock })
         ]);
-
-        // Filter purchases where the item was sold by this profile
-        // This requires mapping Item ID -> Seller Address which we have in `allItems`
         const myItemIds = new Set(allItems.filter((item: any) => item.seller.toLowerCase() === profileAddress.toLowerCase()).map((item: any) => item.id.toString()));
         const mySalesCount = purchases.filter(log => myItemIds.has(log.args.id?.toString() || "")).length;
-        
         let score = 50 + (mySalesCount * 5) - (cancels.length * 10);
-        setReputation(Math.min(Math.max(score, 0), 100)); // Clamp between 0 and 100
-      } catch (e) { console.error("Reputation error", e); }
+        setReputation(Math.min(Math.max(score, 0), 100)); 
+      } catch (e) { console.error(e); }
     };
     calculateReputation();
   }, [publicClient, profileAddress, allItems]);
 
-  // 2. INVENTORY LOGIC
   const inventory = useMemo(() => {
     if (!ownershipData || !allItems) return [];
     return allItems.map((item, i) => {
@@ -163,7 +150,6 @@ export default function ProfilePage() {
     }).filter(Boolean);
   }, [allItems, ownershipData]);
 
-  // 3. SETTINGS & PRIVACY
   useEffect(() => {
     const saved = localStorage.getItem(`chronos_settings_${profileAddress}`);
     if (saved) setSettings(JSON.parse(saved));
@@ -176,22 +162,41 @@ export default function ProfilePage() {
   };
 
   const isInventoryHidden = settings.ghostMode && !isOwnProfile;
-
-  // ... [Handlers: handleDecrypt, handleCopy, verifyTwitter, handleDisconnect - Keep same as before] ...
-  const handleDecrypt = async (item: any) => { /* ... impl from previous ... */ };
   const handleCopy = () => { navigator.clipboard.writeText(profileAddress); setCopied(true); setTimeout(() => setCopied(false), 2000); };
-  const verifyTwitter = () => { /* ... impl from previous ... */ };
   const handleDisconnect = () => { if(confirm("Disconnect?")) { disconnect(); router.push("/"); } };
-
-  const userLevel = Math.floor(Math.sqrt(inventory.length)) + 1;
   const displayAvatar = settings.avatarUrl || ensAvatar;
+  
+  const handleDecrypt = async (item: any) => {
+    try {
+      const blob = await fetchIPFS(item.ipfsCid);
+      const decryptedBlob = await decryptFile(blob, item.receivedKey);
+      const url = window.URL.createObjectURL(decryptedBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', item.name);
+      document.body.appendChild(link);
+      link.click();
+    } catch (e: any) { alert(`Error: ${e.message}`); }
+  };
+
+  const verifyTwitter = () => {
+    setVerifyingTwitter(true);
+    const code = Math.random().toString(36).substring(7).toUpperCase();
+    const text = encodeURIComponent(`Verifying my Web3 Identity on Chronos Market! \n\nSig: ${code} \nWallet: ${profileAddress} \n\n#Chronos #Web3`);
+    window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
+    setTimeout(() => {
+      const handle = prompt("Step 2: Enter your Twitter handle to complete verification (e.g. @elonmusk):");
+      if (handle) { updateSetting('twitterHandle', handle.replace('@', '')); alert("Verification Successful!"); }
+      setVerifyingTwitter(false);
+    }, 2000);
+  };
 
   return (
     <div className="bg-[#020e14] text-white min-h-screen font-display overflow-x-hidden relative">
       <div className="fixed inset-0 z-0 pointer-events-none bg-[linear-gradient(rgba(0,229,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(0,229,255,0.05)_1px,transparent_1px)] bg-[size:40px_40px] opacity-20"></div>
       <Navigation />
 
-      <main className="flex-grow w-full max-w-[1440px] mx-auto p-6 lg:p-8 flex flex-col lg:flex-row gap-8 relative z-10">
+      <main className="flex-grow w-full max-w-[1440px] mx-auto p-4 md:p-8 flex flex-col lg:flex-row gap-8 relative z-10">
         
         <aside className="w-full lg:w-80 flex flex-col gap-6 shrink-0">
           <div className="rounded-xl border border-white/10 bg-[#0b1a24]/80 backdrop-blur-md p-6 flex flex-col items-center text-center relative overflow-hidden shadow-2xl">
@@ -205,15 +210,15 @@ export default function ProfilePage() {
             </div>
 
             <h1 className="text-2xl font-bold text-white mb-1 tracking-tight truncate w-full">{settings.displayName || ensName || "Time Traveler"}</h1>
-            <p className="text-primary text-sm font-medium mb-2">Level {userLevel} User</p>
+            <p className="text-primary text-sm font-medium mb-2">Level {Math.floor(Math.sqrt(inventory.length)) + 1} User</p>
 
-            {/* REPUTATION SCORE DISPLAY */}
+            {/* Reputation */}
             <div className="w-full bg-black/20 rounded-lg p-2 mb-4 border border-white/5">
                 <div className="flex justify-between items-center text-xs mb-1">
                     <span className="text-gray-400 font-mono uppercase flex items-center gap-1"><Shield size={10}/> Trust Score</span>
                     <span className={cn("font-bold font-mono", reputation > 70 ? "text-green-400" : reputation > 40 ? "text-yellow-400" : "text-red-400")}>{reputation}/100</span>
                 </div>
-                <div className="h-1.5 w-full bg-black rounded-full overflow-hidden">
+                <div className="h-1.5 w-full bg-black rounded-full overflow-hidden border border-white/5">
                     <div className={cn("h-full shadow-[0_0_8px_currentColor]", reputation > 70 ? "bg-green-500" : reputation > 40 ? "bg-yellow-500" : "bg-red-500")} style={{ width: `${reputation}%` }}></div>
                 </div>
             </div>
@@ -226,8 +231,7 @@ export default function ProfilePage() {
               </button>
             </div>
 
-            {/* MOCK BALANCE DISPLAY */}
-            <div className="grid grid-cols-2 gap-3 w-full mb-6">
+            <div className="grid grid-cols-2 gap-3 w-full mb-6 mt-4">
               <div className="bg-[#0f172a]/50 p-3 rounded-lg border border-white/5">
                 <p className="text-[10px] text-gray-400 uppercase mb-1">Balance</p>
                 <p className="text-white font-bold font-mono text-sm truncate">
@@ -240,11 +244,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {isOwnProfile && (
-              <button onClick={handleDisconnect} className="w-full py-3 px-4 bg-black/40 hover:bg-red-900/20 border border-white/10 hover:border-red-500/50 text-gray-400 hover:text-red-400 rounded-lg transition-all text-xs font-mono flex items-center justify-center gap-2 group uppercase tracking-widest">
-                <Power size={16} className="group-hover:text-red-500 transition-colors"/> Disconnect
-              </button>
-            )}
+            {isOwnProfile && <button onClick={handleDisconnect} className="w-full py-3 px-4 bg-black/40 hover:bg-red-900/20 border border-white/10 hover:border-red-500/50 text-gray-400 hover:text-red-400 rounded-lg transition-all text-xs font-mono flex items-center justify-center gap-2 group uppercase tracking-widest"><Power size={16} className="group-hover:text-red-500 transition-colors"/> Disconnect</button>}
           </div>
         </aside>
 
@@ -272,24 +272,20 @@ export default function ProfilePage() {
              )
            )}
            
-           {/* ... Transactions and Settings Tabs (Same as previous, just ensure MOCK is used) ... */}
            {activeTab === 'SETTINGS' && (
             <div className="rounded-xl border border-white/10 bg-[#0b1a24]/80 p-6 animate-in fade-in slide-in-from-right-4 duration-500 space-y-8">
-              {/* ... Profile & Socials ... */}
-              
+              <div className="space-y-4">
+                <h3 className="text-white font-bold uppercase tracking-wider text-sm flex items-center gap-2 border-b border-white/5 pb-2"><User size={16} className="text-primary"/> Profile Identity</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2"><label className="text-[10px] font-mono text-gray-400 uppercase">Display Name</label><input className="w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-primary outline-none" placeholder="Username" value={settings.displayName} onChange={(e) => updateSetting('displayName', e.target.value)} /></div>
+                  <div className="space-y-2"><label className="text-[10px] font-mono text-gray-400 uppercase">Avatar URL</label><input className="w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-primary outline-none" placeholder="https://..." value={settings.avatarUrl} onChange={(e) => updateSetting('avatarUrl', e.target.value)} /></div>
+                </div>
+              </div>
               <div className="space-y-4">
                 <h3 className="text-white font-bold uppercase tracking-wider text-sm flex items-center gap-2 border-b border-white/5 pb-2"><Settings size={16} className="text-primary"/> System Preferences</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* ... Auto Decrypt ... */}
-                  <div className="flex items-center justify-between group p-3 rounded-lg hover:bg-white/5 transition-colors cursor-pointer" onClick={() => updateSetting('ghostMode', !settings.ghostMode)}>
-                    <div className="flex flex-col">
-                      <span className="text-gray-300 text-sm font-medium">Ghost Mode</span>
-                      <span className="text-[10px] text-gray-500">Hide inventory from public view</span>
-                    </div>
-                    <div className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors", settings.ghostMode ? "bg-primary/20" : "bg-gray-700")}>
-                      <span className={cn("inline-block h-4 w-4 transform rounded-full transition-transform", settings.ghostMode ? "translate-x-6 bg-primary shadow-[0_0_10px_#00E5FF]" : "translate-x-1 bg-gray-400")}></span>
-                    </div>
-                  </div>
+                <div className="flex items-center justify-between group p-3 rounded-lg hover:bg-white/5 transition-colors cursor-pointer" onClick={() => updateSetting('ghostMode', !settings.ghostMode)}>
+                    <div className="flex flex-col"><span className="text-gray-300 text-sm font-medium">Ghost Mode</span><span className="text-[10px] text-gray-500">Hide inventory from public view</span></div>
+                    <div className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors", settings.ghostMode ? "bg-primary/20" : "bg-gray-700")}><span className={cn("inline-block h-4 w-4 transform rounded-full transition-transform", settings.ghostMode ? "translate-x-6 bg-primary shadow-[0_0_10px_#00E5FF]" : "translate-x-1 bg-gray-400")}></span></div>
                 </div>
               </div>
             </div>
