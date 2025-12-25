@@ -1,12 +1,24 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // This is required to make the encryption library work in the browser
   webpack: (config) => {
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
+    // 1. Fixes the "Module not found" errors for fs, net, tls
+    config.resolve.fallback = { 
       fs: false, 
+      net: false, 
+      tls: false 
     };
+    
+    // 2. Fixes the "Async Storage" and React Native warnings from MetaMask
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'react-native$': 'react-native-web',
+      '@react-native-async-storage/async-storage': false, 
+    };
+
+    // 3. Prevents other wallet connector library errors
+    config.externals.push('pino-pretty', 'lokijs', 'encoding');
+
     return config;
   },
 };
