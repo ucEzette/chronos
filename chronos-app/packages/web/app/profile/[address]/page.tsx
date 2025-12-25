@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useAccount, useBalance, useEnsName, useEnsAvatar, useDisconnect, useReadContract, useReadContracts, usePublicClient, useSignMessage } from "wagmi";
+import { useAccount, useBalance, useEnsName, useEnsAvatar, useDisconnect, useReadContract, useReadContracts, usePublicClient } from "wagmi";
 import { formatEther, parseAbiItem } from "viem";
 import { Navigation } from "../../../components/Navigation";
 import { PAYLOCK_ABI, PAYLOCK_ADDRESS } from "../../../lib/contracts"; 
@@ -14,8 +14,20 @@ import {
   CheckCircle2, RefreshCw, Download, Music, Video, FileText, User, 
   Clock, ArrowUpRight, ArrowDownLeft, Code, Twitter, Upload, Edit3, 
   Link as LinkIcon, X, Camera, ShieldCheck, Sparkles, Image as ImageIcon,
-  Lock, EyeOff, Shield
+  Lock, EyeOff, Shield, Ban
 } from "lucide-react";
+
+// --- HELPERS ---
+const formatTimeAgo = (blockTimestamp: number | undefined) => {
+  if (!blockTimestamp) return "Pending...";
+  const seconds = Math.floor((Date.now() - blockTimestamp * 1000) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(blockTimestamp * 1000).toLocaleDateString();
+};
 
 // --- COMPONENT: AVATAR MODAL ---
 function AvatarModal({ isOpen, onClose, onSelect }: { isOpen: boolean, onClose: () => void, onSelect: (url: string) => void }) {
@@ -47,7 +59,7 @@ function AvatarModal({ isOpen, onClose, onSelect }: { isOpen: boolean, onClose: 
             <div className="grid grid-cols-4 gap-4">{warriors.map((url, i) => (<button key={i} onClick={() => { onSelect(url); onClose(); }} className="aspect-square rounded-xl bg-white/5 hover:bg-primary/20 border border-white/5 hover:border-primary transition-all p-1 overflow-hidden group relative"><img src={url} className="w-full h-full object-cover group-hover:scale-110 transition-transform" /></button>))}</div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-4 border-2 border-dashed border-white/10 rounded-xl bg-white/5 p-8 relative hover:border-primary/50 transition-colors group">
-                {uploading ? <RefreshCw className="animate-spin text-primary" size={32}/> : <><div className="p-4 rounded-full bg-primary/10 text-primary mb-2 group-hover:scale-110 transition-transform"><Upload size={32}/></div><p className="text-sm text-white font-bold">Click to Upload Image</p><input type="file" accept="image/*" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" /></>}
+              {uploading ? <RefreshCw className="animate-spin text-primary" size={32} /> : <><div className="p-4 rounded-full bg-primary/10 text-primary mb-2 group-hover:scale-110 transition-transform"><Upload size={32}/></div><p className="text-sm text-white font-bold">Click to Upload Image</p><input type="file" accept="image/*" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" /></>}
             </div>
           )}
         </div>
@@ -56,9 +68,10 @@ function AvatarModal({ isOpen, onClose, onSelect }: { isOpen: boolean, onClose: 
   );
 }
 
-// --- INVENTORY ITEM ---
+// --- SUB-COMPONENT: INVENTORY CARD ---
 function InventoryItem({ item, onDecrypt }: { item: any, onDecrypt: (item: any) => void }) {
   const [meta, setMeta] = useState<{ name: string, type: string, image: string } | null>(null);
+
   useEffect(() => {
     const loadMeta = async () => {
       try {
@@ -93,6 +106,7 @@ function InventoryItem({ item, onDecrypt }: { item: any, onDecrypt: (item: any) 
   );
 }
 
+// --- MAIN PROFILE PAGE ---
 export default function ProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -116,31 +130,130 @@ export default function ProfilePage() {
   });
 
   const [activeTab, setActiveTab] = useState<'INVENTORY' | 'TRANSACTIONS' | 'SETTINGS'>('INVENTORY');
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loadingTx, setLoadingTx] = useState(false);
   const [settings, setSettings] = useState({ autoDecrypt: false, ghostMode: false, displayName: "", avatarUrl: "", twitterHandle: "" });
   const [reputation, setReputation] = useState(50);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [verifyingTwitter, setVerifyingTwitter] = useState(false);
 
-  // Reputation Calc
+  // 1. REPUTATION ALGORITHM
   useEffect(() => {
     if (!publicClient || !profileAddress) return;
     const calculateReputation = async () => {
       try {
         const fromBlock = BigInt(0);
-        const [purchases, cancels] = await Promise.all([
-            publicClient.getLogs({ address: PAYLOCK_ADDRESS, event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), fromBlock }),
-            publicClient.getLogs({ address: PAYLOCK_ADDRESS, event: parseAbiItem('event ItemCanceled(uint256 indexed id, address indexed seller)'), args: { seller: profileAddress as `0x${string}` }, fromBlock })
-        ]);
+        // Find sales where I am the seller
+        // This requires filtering ItemPurchased logs where the item's seller matches profileAddress
+        // Since we can't easily filter logs by item parameters without indexing, we approximate:
+        // We look at all Purchase events, and check if the item ID belongs to an item sold by this user.
+        
+        const purchases = await publicClient.getLogs({ 
+            address: PAYLOCK_ADDRESS, 
+            event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), 
+            fromBlock 
+        });
+        
+        const cancels = await publicClient.getLogs({ 
+            address: PAYLOCK_ADDRESS, 
+            event: parseAbiItem('event ItemCanceled(uint256 indexed id, address indexed seller)'), 
+            args: { seller: profileAddress as `0x${string}` }, 
+            fromBlock 
+        });
+
+        // Map Item IDs to their sellers from the fetched items list
         const myItemIds = new Set(allItems.filter((item: any) => item.seller.toLowerCase() === profileAddress.toLowerCase()).map((item: any) => item.id.toString()));
+        
+        // Count successful sales
         const mySalesCount = purchases.filter(log => myItemIds.has(log.args.id?.toString() || "")).length;
+        
+        // Formula: 50 base + (Sales * 5) - (Cancels * 10)
         let score = 50 + (mySalesCount * 5) - (cancels.length * 10);
         setReputation(Math.min(Math.max(score, 0), 100)); 
-      } catch (e) { console.error(e); }
+      } catch (e) { console.error("Reputation error", e); }
     };
     calculateReputation();
   }, [publicClient, profileAddress, allItems]);
 
+  // 2. TRANSACTION HISTORY (Direct Fetch)
+  useEffect(() => {
+    if (!publicClient || !profileAddress || activeTab !== 'TRANSACTIONS') return;
+    
+    const fetchTx = async () => {
+      setLoadingTx(true);
+      try {
+        const currentBlock = await publicClient.getBlockNumber();
+        // Look back 100k blocks (approx 2 weeks on mainnet, longer on testnets) or start from 0
+        const lookback = BigInt(100000); 
+        const fromBlock = (currentBlock - lookback) > BigInt(0) ? (currentBlock - lookback) : BigInt(0);
+        
+        const addr = profileAddress as `0x${string}`;
+
+        // Fetch logs for various event types involving this user
+        const [purchases, listings, deliveries, cancels] = await Promise.all([
+          // Purchases I made
+          publicClient.getLogs({ 
+            address: PAYLOCK_ADDRESS, 
+            event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), 
+            args: { buyer: addr }, 
+            fromBlock 
+          }),
+          // Listings I created
+          publicClient.getLogs({ 
+            address: PAYLOCK_ADDRESS, 
+            event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price)'), 
+            args: { seller: addr }, 
+            fromBlock 
+          }),
+          // Keys I received
+          publicClient.getLogs({ 
+            address: PAYLOCK_ADDRESS, 
+            event: parseAbiItem('event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey)'), 
+            args: { buyer: addr }, 
+            fromBlock 
+          }),
+          // Cancellations I made
+          publicClient.getLogs({ 
+            address: PAYLOCK_ADDRESS, 
+            event: parseAbiItem('event ItemCanceled(uint256 indexed id, address indexed seller)'), 
+            args: { seller: addr }, 
+            fromBlock 
+          })
+        ]);
+
+        // Fetch timestamps for all found blocks to display "Time Ago"
+        const blockNumbers = new Set([
+            ...purchases.map(l => l.blockNumber),
+            ...listings.map(l => l.blockNumber),
+            ...deliveries.map(l => l.blockNumber),
+            ...cancels.map(l => l.blockNumber)
+        ]);
+
+        const blockMap = new Map<string, number>();
+        await Promise.all(Array.from(blockNumbers).map(async (bn) => {
+            const block = await publicClient.getBlock({ blockNumber: bn });
+            blockMap.set(bn.toString(), Number(block.timestamp));
+        }));
+
+        const formatted = [
+          ...purchases.map(l => ({ type: 'PURCHASE', block: l.blockNumber, hash: l.transactionHash, id: l.args.id?.toString(), timestamp: blockMap.get(l.blockNumber.toString()) })),
+          ...listings.map(l => ({ type: 'LISTING', block: l.blockNumber, hash: l.transactionHash, id: l.args.id?.toString(), timestamp: blockMap.get(l.blockNumber.toString()) })),
+          ...deliveries.map(l => ({ type: 'DELIVERY', block: l.blockNumber, hash: l.transactionHash, id: l.args.id?.toString(), timestamp: blockMap.get(l.blockNumber.toString()) })),
+          ...cancels.map(l => ({ type: 'CANCEL', block: l.blockNumber, hash: l.transactionHash, id: l.args.id?.toString(), timestamp: blockMap.get(l.blockNumber.toString()) }))
+        ].sort((a, b) => Number(b.block - a.block)); // Sort Newest First
+
+        setTransactions(formatted);
+      } catch (e) { 
+        console.error("Tx sync error", e); 
+      } finally { 
+        setLoadingTx(false); 
+      }
+    };
+    fetchTx();
+  }, [activeTab, publicClient, profileAddress]);
+
+  // 3. INVENTORY & SETTINGS
   const inventory = useMemo(() => {
     if (!ownershipData || !allItems) return [];
     return allItems.map((item, i) => {
@@ -191,6 +304,8 @@ export default function ProfilePage() {
     }, 2000);
   };
 
+  const userLevel = Math.floor(Math.sqrt(inventory.length)) + 1;
+
   return (
     <div className="bg-[#020e14] text-white min-h-screen font-display overflow-x-hidden relative">
       <div className="fixed inset-0 z-0 pointer-events-none bg-[linear-gradient(rgba(0,229,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(0,229,255,0.05)_1px,transparent_1px)] bg-[size:40px_40px] opacity-20"></div>
@@ -198,6 +313,7 @@ export default function ProfilePage() {
 
       <main className="flex-grow w-full max-w-[1440px] mx-auto p-4 md:p-8 flex flex-col lg:flex-row gap-8 relative z-10">
         
+        {/* Sidebar */}
         <aside className="w-full lg:w-80 flex flex-col gap-6 shrink-0">
           <div className="rounded-xl border border-white/10 bg-[#0b1a24]/80 backdrop-blur-md p-6 flex flex-col items-center text-center relative overflow-hidden shadow-2xl">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-blue-500 to-primary"></div>
@@ -210,7 +326,7 @@ export default function ProfilePage() {
             </div>
 
             <h1 className="text-2xl font-bold text-white mb-1 tracking-tight truncate w-full">{settings.displayName || ensName || "Time Traveler"}</h1>
-            <p className="text-primary text-sm font-medium mb-2">Level {Math.floor(Math.sqrt(inventory.length)) + 1} User</p>
+            <p className="text-primary text-sm font-medium mb-2">Level {userLevel} User</p>
 
             {/* Reputation */}
             <div className="w-full bg-black/20 rounded-lg p-2 mb-4 border border-white/5">
@@ -267,13 +383,50 @@ export default function ProfilePage() {
                  {inventory.map((item, i) => (
                     <InventoryItem key={i} item={item} onDecrypt={handleDecrypt} />
                  ))}
-                 {inventory.length === 0 && <div className="col-span-full text-center py-20 text-gray-500">No items found.</div>}
+                 {inventory.length === 0 && <div className="col-span-full text-center py-20 text-gray-500">No items found in public inventory.</div>}
                </div>
              )
            )}
            
+           {activeTab === 'TRANSACTIONS' && (
+            <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {loadingTx ? (
+                <div className="py-20 text-center"><RefreshCw className="animate-spin mx-auto text-primary"/></div>
+              ) : transactions.length > 0 ? (
+                transactions.map((tx, i) => (
+                  <a key={i} href={`https://testnet.dhscan.io/tx/${tx.hash}`} target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 rounded-lg bg-[#0b1a24]/60 border border-white/5 hover:border-primary/30 hover:bg-white/5 transition-all group">
+                    <div className="flex items-center gap-4">
+                      <div className={cn("p-2 rounded border", 
+                        tx.type === 'PURCHASE' ? "bg-green-500/10 text-green-500 border-green-500/20" : 
+                        tx.type === 'LISTING' ? "bg-blue-500/10 text-blue-500 border-blue-500/20" : 
+                        tx.type === 'CANCEL' ? "bg-red-500/10 text-red-500 border-red-500/20" :
+                        "bg-yellow-500/10 text-yellow-500 border-yellow-500/20"
+                      )}>
+                        {tx.type === 'PURCHASE' ? <ArrowDownLeft size={18}/> : tx.type === 'LISTING' ? <ArrowUpRight size={18}/> : tx.type === 'CANCEL' ? <Ban size={18}/> : <Code size={18}/>}
+                      </div>
+                      <div>
+                        <h4 className="text-white font-bold text-sm flex items-center gap-2">
+                          {tx.type} • Item #{tx.id}
+                          <span className="text-[10px] font-normal text-gray-500 bg-white/5 px-2 py-0.5 rounded">{formatTimeAgo(tx.timestamp)}</span>
+                        </h4>
+                        <p className="text-[10px] text-gray-500 font-mono">{tx.hash.slice(0,10)}...</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-400 group-hover:text-primary">
+                      <span className="hidden sm:inline">View Explorer</span> <ArrowUpRight size={14}/>
+                    </div>
+                  </a>
+                ))
+              ) : (
+                <div className="text-center py-20 text-gray-500 font-mono text-xs uppercase bg-black/20 rounded-xl border border-white/5 border-dashed">
+                  No transaction history found on-chain.
+                </div>
+              )}
+            </div>
+           )}
+
            {activeTab === 'SETTINGS' && (
-            <div className="rounded-xl border border-white/10 bg-[#0b1a24]/80 p-6 animate-in fade-in slide-in-from-right-4 duration-500 space-y-8">
+            <div className="rounded-xl border border-white/10 bg-[#0b1a24]/80 p-6 animate-in fade-in space-y-8">
               <div className="space-y-4">
                 <h3 className="text-white font-bold uppercase tracking-wider text-sm flex items-center gap-2 border-b border-white/5 pb-2"><User size={16} className="text-primary"/> Profile Identity</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -286,6 +439,19 @@ export default function ProfilePage() {
                 <div className="flex items-center justify-between group p-3 rounded-lg hover:bg-white/5 transition-colors cursor-pointer" onClick={() => updateSetting('ghostMode', !settings.ghostMode)}>
                     <div className="flex flex-col"><span className="text-gray-300 text-sm font-medium">Ghost Mode</span><span className="text-[10px] text-gray-500">Hide inventory from public view</span></div>
                     <div className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors", settings.ghostMode ? "bg-primary/20" : "bg-gray-700")}><span className={cn("inline-block h-4 w-4 transform rounded-full transition-transform", settings.ghostMode ? "translate-x-6 bg-primary shadow-[0_0_10px_#00E5FF]" : "translate-x-1 bg-gray-400")}></span></div>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <h3 className="text-white font-bold uppercase tracking-wider text-sm flex items-center gap-2 border-b border-white/5 pb-2"><LinkIcon size={16} className="text-primary"/> Social</h3>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+                  <div className="flex items-center gap-3"><div className="p-2 bg-blue-500/20 text-blue-400 rounded"><Twitter size={18}/></div><div><p className="text-sm font-bold text-white">Twitter / X</p><p className="text-[10px] text-gray-400">{settings.twitterHandle ? `@${settings.twitterHandle}` : "Not Linked"}</p></div></div>
+                  {settings.twitterHandle ? (
+                    <button onClick={() => updateSetting('twitterHandle', "")} className="text-xs text-red-400 hover:underline">Unlink</button>
+                  ) : (
+                    <button onClick={verifyTwitter} disabled={verifyingTwitter} className="px-3 py-1 bg-primary/10 text-primary text-xs font-bold rounded border border-primary/20 hover:bg-primary/20 flex items-center gap-2">
+                      {verifyingTwitter ? <RefreshCw className="animate-spin" size={12}/> : null} {verifyingTwitter ? "VERIFYING..." : "LINK ACCOUNT"}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
