@@ -21,7 +21,7 @@ export default function ProfileRedirect() {
     <div className="h-screen w-full flex items-center justify-center bg-[#020e14] text-cyan-400">
       <div className="flex flex-col items-center gap-4">
         <Loader2 className="animate-spin w-10 h-10" />
-        <p className="font-mono text-sm tracking-widest animate-pulse">LOCATING USER...</p>
+        <p className="font-mono text-sm tracking-widest animate-pulse">LOCATING USER IDENTITY...</p>
       </div>
     </div>
   );

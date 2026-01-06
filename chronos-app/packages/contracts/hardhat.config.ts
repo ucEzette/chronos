@@ -7,23 +7,21 @@ require("dotenv").config();
 const config: HardhatUserConfig = {
   solidity: "0.8.20",
   networks: {
-    // 1. DataHaven Testnet
     datahaven: {
       url: "https://services.datahaven-testnet.network/testnet",
       chainId: 55931,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
-    // 2. Arc Testnet (Added)
     arc_testnet: {
-      url: "https://rpc.testnet.arc.network",
-      chainId: 5042002,
+      url: "https://rpc.testnet.arc.network", // Verified RPC
+      chainId: 5042002, // Verified Chain ID
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
   },
   etherscan: {
     apiKey: {
       datahaven: "test", 
-      arc_testnet: "test", // Blockscout-based explorers often accept 'test' or empty string
+      arc_testnet: "test", 
     },
     customChains: [
       {

@@ -3,17 +3,19 @@
 import { useState, useEffect, useRef } from "react";
 import { useAccount, useWriteContract, useSignMessage } from "wagmi";
 import { parseEther } from "viem";
+import { useRouter } from "next/navigation";
 import { Navigation } from "../../components/Navigation";
-import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts"; // Import getContractAddress
-import { uploadToIPFS } from "../../lib/ipfs"; 
+import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts"; // Updated Import
+import { uploadToIPFS } from "../../lib/utils"; 
 import { signatureToKey, encryptFile } from "../../lib/crypto";
 import { cn } from "@/lib/utils";
 import { 
   Loader2, Rocket, Lock, Image as ImageIcon, KeyRound, UploadCloud, 
   CheckCircle2, AlertCircle, X, Eye, Edit3, Film, Mic, AlignLeft, 
-  ShieldCheck, Box, FileText, Code, Music, Sliders, Maximize, Zap
+  ShieldCheck, Zap, Sliders, Maximize, DollarSign
 } from "lucide-react";
 
+// Toast Component (Same as before)
 function Toast({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 5000); return () => clearTimeout(t); }, [onClose]);
   return (
@@ -26,8 +28,9 @@ function Toast({ message, type, onClose }: { message: string, type: 'success' | 
 }
 
 export default function CreateListingPage() {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const { address, isConnected, chain } = useAccount(); // Get current chain
+  const { address, isConnected, chain } = useAccount(); // Get Chain
   const { writeContractAsync } = useWriteContract();
   const { signMessageAsync } = useSignMessage();
   
@@ -35,26 +38,20 @@ export default function CreateListingPage() {
   const [status, setStatus] = useState<'IDLE' | 'SIGNING_KEY' | 'UPLOADING' | 'TX' | 'SUCCESS'>('IDLE');
   const [viewMode, setViewMode] = useState<'EDIT' | 'PREVIEW'>('EDIT');
 
-  // Form Data including Max Supply
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    price: "",
-    maxSupply: "1",
-    fileType: "",
-  });
-
+  // Form Data
+  const [formData, setFormData] = useState({ name: "", description: "", price: "", maxSupply: "1", fileType: ".DATA" });
   const [encryptedFile, setEncryptedFile] = useState<File | null>(null);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'IMAGE' | 'VIDEO' | 'AUDIO' | 'UNKNOWN'>('UNKNOWN');
   
-  // Visual Settings (Holo Tuner)
+  // Visual Settings
   const [blurAmount, setBlurAmount] = useState(0);
   const [zoomLevel, setZoomLevel] = useState(100);
-
-  // Video Ref for preview control
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Dynamic Symbol
+  const currencySymbol = chain?.id === 5042002 ? "USDC" : "MOCK";
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -62,7 +59,7 @@ export default function CreateListingPage() {
     if (e.target.files?.[0]) {
       const file = e.target.files[0];
       setEncryptedFile(file);
-      const ext = file.name.slice((file.name.lastIndexOf(".") - 1 >>> 0) + 2).toUpperCase();
+      const ext = file.name.split('.').pop()?.toUpperCase();
       if (ext) setFormData(p => ({ ...p, fileType: `.${ext}` }));
     }
   };
@@ -72,10 +69,7 @@ export default function CreateListingPage() {
       const file = e.target.files[0];
       setPreviewFile(file);
       setPreviewUrl(URL.createObjectURL(file));
-      
-      // Reset visuals
-      setBlurAmount(0); 
-      setZoomLevel(100);
+      setBlurAmount(0); setZoomLevel(100);
 
       if (file.type.startsWith('image/')) setMediaType('IMAGE');
       else if (file.type.startsWith('video/')) setMediaType('VIDEO');
@@ -86,66 +80,66 @@ export default function CreateListingPage() {
 
   const handlePublish = async () => {
     if (!isConnected || !address || !encryptedFile || !previewFile || !formData.name || !formData.price) {
-      setToast({ message: "Missing files or details.", type: 'error' });
+      setToast({ message: "Please fill all fields and upload files.", type: 'error' });
       return;
     }
 
     try {
-      // 1. GENERATE KEY FROM WALLET
+      // 1. GENERATE KEY
       setStatus('SIGNING_KEY');
-      const signature = await signMessageAsync({
-        message: `CHRONOS_ACCESS:${formData.name.trim()}`
-      });
+      const signature = await signMessageAsync({ message: `CHRONOS_ACCESS:${formData.name.trim()}` });
       const secureKey = signatureToKey(signature);
 
-      // 2. ENCRYPT FILE
-      const encryptedBlob = await encryptFile(encryptedFile, secureKey);
-      const finalEncryptedFile = new File([encryptedBlob], encryptedFile.name, { type: 'application/octet-stream' });
+      // Store key locally for future delivery
+      const localKeys = JSON.parse(localStorage.getItem('chronos_seller_keys') || '{}');
+      localKeys[formData.name.trim()] = secureKey;
+      localStorage.setItem('chronos_seller_keys', JSON.stringify(localKeys));
 
-      // 3. UPLOAD ASSETS
+      // 2. ENCRYPT & UPLOAD
       setStatus('UPLOADING');
+      const encryptedBlob = await encryptFile(encryptedFile, secureKey);
+      
       const [encryptedCid, rawPreviewCid] = await Promise.all([
-        uploadToIPFS(finalEncryptedFile),
+        uploadToIPFS(new File([encryptedBlob], encryptedFile.name)),
         uploadToIPFS(previewFile)
       ]);
 
-      // 4. METADATA
+      // 3. METADATA
       const metadata = {
+        name: formData.name,
         description: formData.description,
         image: rawPreviewCid,
-        settings: { blur: blurAmount, zoom: zoomLevel }
+        animation_url: (mediaType === 'VIDEO' || mediaType === 'AUDIO') ? rawPreviewCid : undefined,
+        properties: { blur: blurAmount, zoom: zoomLevel }
       };
-      const metadataFile = new File([JSON.stringify(metadata)], "metadata.json", { type: "application/json" });
-      const metadataCid = await uploadToIPFS(metadataFile);
+      const metadataCid = await uploadToIPFS(JSON.stringify(metadata));
 
-      // 5. CONTRACT CALL
+      // 4. BLOCKCHAIN TRANSACTION (Multi-Chain Address)
       setStatus('TX');
-      
-      // Get the correct contract address for the current chain
-      const currentContractAddress = getContractAddress(chain?.id);
+      const activeContract = getContractAddress(chain?.id); // FIX: Dynamic Address Selection
 
       await writeContractAsync({
-        address: currentContractAddress,
+        address: activeContract,
         abi: PAYLOCK_ABI,
         functionName: 'listItem',
         args: [
           formData.name.trim(),
-          encryptedCid,
-          metadataCid, // Using Metadata CID for the preview field
-          formData.fileType || ".DATA",
+          `ipfs://${encryptedCid}`, 
+          `ipfs://${metadataCid}`,  
+          formData.fileType,
           parseEther(formData.price),
           BigInt(formData.maxSupply)
-        ] as any, 
+        ], 
       });
       
       setStatus('SUCCESS');
-      setToast({ message: "Time Capsule Published!", type: 'success' });
-      setTimeout(() => window.location.href = "/dashboard", 2000);
+      setToast({ message: "Listing Published Successfully!", type: 'success' });
+      setTimeout(() => router.push("/dashboard"), 2000);
       
     } catch (e: any) {
       console.error(e);
       setStatus('IDLE');
-      setToast({ message: "Aborted: " + (e.shortMessage || e.message), type: 'error' });
+      setToast({ message: "Failed: " + (e.shortMessage || e.message), type: 'error' });
     }
   };
 
@@ -177,20 +171,15 @@ export default function CreateListingPage() {
           </div>
         </div>
 
-        {/* MAIN EDITOR GRID */}
+        {/* Editor Grid */}
         {viewMode === 'EDIT' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in zoom-in-95 duration-500">
-            
-            {/* LEFT COLUMN: Inputs */}
             <div className="lg:col-span-8 space-y-8">
-               
-               {/* 01. ASSETS */}
                <div className="rounded-xl border border-primary/20 bg-[#0b1a24]/60 backdrop-blur-md p-6 relative overflow-hidden shadow-2xl">
                   <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2 font-mono uppercase">
                      <span className="size-6 rounded bg-primary/20 flex items-center justify-center text-primary text-xs border border-primary/30">01</span> Assets & Intelligence
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                     {/* ENCRYPTED FILE INPUT */}
                      <div className={cn("group relative rounded-lg border-2 border-dashed p-8 text-center transition-all cursor-pointer overflow-hidden", encryptedFile ? "border-primary bg-primary/5" : "border-primary/20 hover:border-primary/60 bg-black/20")}>
                         <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><Lock size={24}/></div>
                         <h4 className="text-sm font-bold text-white font-mono uppercase">Encrypted Archive</h4>
@@ -199,7 +188,6 @@ export default function CreateListingPage() {
                         {encryptedFile && <CheckCircle2 className="absolute top-4 right-4 text-primary" size={16}/>}
                      </div>
                      
-                     {/* PREVIEW FILE INPUT */}
                      <div className={cn("group relative rounded-lg border-2 border-dashed p-8 text-center transition-all cursor-pointer overflow-hidden", previewFile ? "border-cyan-400 bg-cyan-400/5" : "border-primary/20 hover:border-cyan-400/60 bg-black/20")}>
                         <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-400">
                            {mediaType === 'VIDEO' ? <Film size={24}/> : mediaType === 'AUDIO' ? <Mic size={24}/> : <ImageIcon size={24}/>}
@@ -212,7 +200,6 @@ export default function CreateListingPage() {
                   </div>
                </div>
 
-               {/* 02. DETAILS & MAX SUPPLY */}
                <div className="rounded-xl border border-white/10 bg-[#0b1a24]/60 backdrop-blur-md p-6 shadow-2xl">
                   <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2 font-mono uppercase">
                      <span className="size-6 rounded bg-blue-500/20 flex items-center justify-center text-blue-400 text-xs border border-blue-500/30">02</span> Manifest Details
@@ -225,7 +212,8 @@ export default function CreateListingPage() {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                            <div className="space-y-2">
-                              <label className="text-xs font-mono text-primary/80 uppercase tracking-wide">Price (ETH)</label>
+                              {/* FIX: Dynamic Currency Label */}
+                              <label className="text-xs font-mono text-primary/80 uppercase tracking-wide">Price ({currencySymbol})</label>
                               <input className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white focus:border-primary outline-none font-mono" placeholder="0.05" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})}/>
                            </div>
                            <div className="space-y-2">
@@ -242,10 +230,8 @@ export default function CreateListingPage() {
                </div>
             </div>
 
-            {/* RIGHT COLUMN: Preview & Tuner */}
             <div className="lg:col-span-4 space-y-6">
-               
-               {/* LIVE PREVIEW CARD */}
+               {/* Preview Panel (Same as provided code) */}
                <div className="rounded-xl border border-white/10 bg-[#0b1a24]/60 backdrop-blur-md overflow-hidden shadow-2xl relative">
                   <div className="p-4 border-b border-white/10 bg-black/20 flex justify-between items-center">
                      <span className="text-xs font-bold uppercase tracking-widest text-white/60">Live Preview</span>
@@ -277,7 +263,6 @@ export default function CreateListingPage() {
                                  style={{ filter: `blur(${blurAmount}px)`, transform: `scale(${zoomLevel/100})` }}
                               />
                            )}
-                           
                            {/* Overlay Text if Blurred */}
                            {blurAmount > 5 && (
                               <div className="absolute inset-0 flex items-center justify-center z-20">
@@ -292,55 +277,12 @@ export default function CreateListingPage() {
                      )}
                   </div>
                </div>
-
-               {/* HOLO TUNER (SETTINGS) */}
-               {previewUrl && (
-                  <div className="rounded-xl border border-primary/20 bg-[#0b1a24]/60 backdrop-blur-md p-6 shadow-2xl animate-in slide-in-from-right">
-                     <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2 font-mono uppercase">
-                        <span className="size-6 rounded bg-primary/20 flex items-center justify-center text-primary text-xs border border-primary/30"><Sliders size={12}/></span> Holo Tuner
-                     </h3>
-                     
-                     <div className="space-y-6">
-                        {/* Blur Slider */}
-                        <div className="space-y-3">
-                           <div className="flex justify-between text-xs font-mono uppercase">
-                              <span className="text-primary/80">Obfuscation (Blur)</span>
-                              <span className="text-white">{blurAmount}px</span>
-                           </div>
-                           <input 
-                              type="range" min="0" max="20" step="1" 
-                              value={blurAmount} 
-                              onChange={(e) => setBlurAmount(Number(e.target.value))}
-                              className="w-full h-2 bg-black/50 rounded-lg appearance-none cursor-pointer accent-primary"
-                           />
-                        </div>
-
-                        {/* Zoom Slider */}
-                        <div className="space-y-3">
-                           <div className="flex justify-between text-xs font-mono uppercase">
-                              <span className="text-primary/80 flex items-center gap-2"><Maximize size={12}/> Zoom Level</span>
-                              <span className="text-white">{zoomLevel}%</span>
-                           </div>
-                           <input 
-                              type="range" min="100" max="200" step="5" 
-                              value={zoomLevel} 
-                              onChange={(e) => setZoomLevel(Number(e.target.value))}
-                              className="w-full h-2 bg-black/50 rounded-lg appearance-none cursor-pointer accent-primary"
-                           />
-                        </div>
-                     </div>
-                  </div>
-               )}
-
-               {/* KEY INFO */}
-               <div className="rounded-xl border border-white/10 bg-[#0b1a24]/60 p-4 flex gap-3 items-center">
-                  <div className="p-2 bg-primary/10 rounded-lg text-primary"><ShieldCheck size={20}/></div>
-                  <div>
-                     <div className="text-xs font-bold text-white uppercase">Secure Generation</div>
-                     <div className="text-[10px] text-gray-400 font-mono">Keys are derived from your wallet signature.</div>
-                  </div>
-               </div>
-
+               
+               {/* Tuner Controls */}
+                <div className="rounded-xl border border-white/10 bg-[#0b1a24]/60 p-6 space-y-4">
+                    <h3 className="text-sm font-bold text-white uppercase flex gap-2"><Sliders size={14}/> Holo Tuner</h3>
+                    <input type="range" min="0" max="20" value={blurAmount} onChange={(e) => setBlurAmount(Number(e.target.value))} className="w-full h-2 bg-black/50 rounded-lg accent-primary"/>
+                </div>
             </div>
           </div>
         )}

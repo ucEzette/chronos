@@ -1,17 +1,14 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useRouter } from "next/navigation"; // Added Router
+import { useRouter } from "next/navigation";
 import { useAccount, useReadContract, useWriteContract, useWatchContractEvent, usePublicClient, useReadContracts, useSignMessage } from "wagmi";
 import { parseAbiItem, formatEther } from "viem";
 import { Navigation } from "../../components/Navigation";
-import { PAYLOCK_ABI, PAYLOCK_ADDRESS } from "../../lib/contracts";
+import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts"; // Updated Import
 import { signatureToKey } from "@/lib/crypto";
 import { cn } from "@/lib/utils";
-import { 
-  Terminal, Key, ShoppingBag, Plus, Archive, Coins, Shield, 
-  CheckCircle2, AlertCircle, X, Loader2, RefreshCw, Download
-} from "lucide-react";
+import { Terminal, Key, ShoppingBag, Plus, Archive, Coins, Shield, CheckCircle2, AlertCircle, X, Loader2, RefreshCw, Download } from "lucide-react";
 
 // --- Components ---
 function Toast({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) {
@@ -27,8 +24,8 @@ function Toast({ message, type, onClose }: { message: string, type: 'success' | 
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
-  const router = useRouter(); // Initialize Router
-  const { address } = useAccount();
+  const router = useRouter(); 
+  const { address, chain } = useAccount(); // Get Chain
   const { writeContractAsync } = useWriteContract();
   const { signMessageAsync } = useSignMessage();
   const publicClient = usePublicClient();
@@ -40,38 +37,67 @@ export default function DashboardPage() {
   const [deliveryEvents, setDeliveryEvents] = useState<any[]>([]);
   const [cancelledIds, setCancelledIds] = useState<Set<string>>(new Set());
 
-  // 1. Reads
+  // 1. Dynamic Contract Address based on Chain ID
+  const activeContract = getContractAddress(chain?.id);
+
+  // 2. Reads
   const { data: rawItems, refetch: refetchItems } = useReadContract({
-    address: PAYLOCK_ADDRESS, abi: PAYLOCK_ABI, functionName: 'getMarketplaceItems',
+    address: activeContract, 
+    abi: PAYLOCK_ABI, 
+    functionName: 'getMarketplaceItems',
   });
   const allItems = (rawItems as any[]) || [];
 
   const { data: ownershipData } = useReadContracts({
     contracts: allItems.map((item) => ({
-      address: PAYLOCK_ADDRESS, abi: PAYLOCK_ABI, functionName: 'checkOwnership', args: [item.id, address],
+      address: activeContract, 
+      abi: PAYLOCK_ABI, 
+      functionName: 'checkOwnership', 
+      args: [item.id, address],
     })),
     query: { enabled: !!address && allItems.length > 0 }
   });
 
-  useWatchContractEvent({ address: PAYLOCK_ADDRESS, abi: PAYLOCK_ABI, eventName: 'ItemPurchased', onLogs: () => { refetchItems(); fetchHistory(); } });
+  // 3. Watch for Events (Auto-Update)
+  useWatchContractEvent({ 
+    address: activeContract, 
+    abi: PAYLOCK_ABI, 
+    eventName: 'ItemPurchased', 
+    onLogs: () => { refetchItems(); fetchHistory(); } 
+  });
   
+  // 4. Fetch History (FIX: Reduced Block Range for Arc)
   const fetchHistory = async () => {
-    if (!publicClient) return;
-    const currentBlock = await publicClient.getBlockNumber();
-    const fromBlock = (currentBlock - BigInt(50000)) > BigInt(0) ? (currentBlock - BigInt(50000)) : BigInt(0);
-    const [pLogs, dLogs, cLogs] = await Promise.all([
-      publicClient.getLogs({ address: PAYLOCK_ADDRESS, event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), fromBlock }),
-      publicClient.getLogs({ address: PAYLOCK_ADDRESS, event: parseAbiItem('event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey)'), fromBlock }),
-      publicClient.getLogs({ address: PAYLOCK_ADDRESS, event: parseAbiItem('event ItemCanceled(uint256 indexed id, address indexed seller)'), fromBlock })
-    ]);
-    setSalesEvents(pLogs.map(l => ({ id: l.args.id?.toString(), buyer: l.args.buyer })));
-    setDeliveryEvents(dLogs.map(l => ({ id: l.args.id?.toString(), buyer: l.args.buyer })));
-    setCancelledIds(new Set(cLogs.map(l => l.args.id?.toString() || "")));
+    if (!publicClient || !activeContract) return;
+    try {
+      const currentBlock = await publicClient.getBlockNumber();
+      // Reduced from 50,000 to 5,000 to respect Arc Testnet's 10k log limit
+      const BLOCK_RANGE = BigInt(5000); 
+      const fromBlock = (currentBlock - BLOCK_RANGE) > BigInt(0) ? (currentBlock - BLOCK_RANGE) : BigInt(0);
+      
+      const [pLogs, dLogs, cLogs] = await Promise.all([
+        publicClient.getLogs({ address: activeContract, event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), fromBlock }),
+        publicClient.getLogs({ address: activeContract, event: parseAbiItem('event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey)'), fromBlock }),
+        publicClient.getLogs({ address: activeContract, event: parseAbiItem('event ItemCanceled(uint256 indexed id, address indexed seller)'), fromBlock })
+      ]);
+      setSalesEvents(pLogs.map(l => ({ id: l.args.id?.toString(), buyer: l.args.buyer })));
+      setDeliveryEvents(dLogs.map(l => ({ id: l.args.id?.toString(), buyer: l.args.buyer })));
+      setCancelledIds(new Set(cLogs.map(l => l.args.id?.toString() || "")));
+    } catch (e) {
+      console.error("Error fetching history:", e);
+    }
   };
 
-  useEffect(() => { fetchHistory(); setMounted(true); }, [publicClient]);
+  // 5. Effect to reload data when Network Switches
+  useEffect(() => { 
+    if (publicClient && activeContract) {
+      fetchHistory(); 
+      refetchItems();
+    }
+    setMounted(true); 
+  }, [publicClient, activeContract, chain?.id]); 
 
-  // 2. Unified Feed
+  // 6. Unified Feed Logic
   const unifiedFeed = useMemo(() => {
     if (!address) return [];
     const feed: any[] = [];
@@ -90,7 +116,7 @@ export default function DashboardPage() {
         }
       }
 
-      // BUYER LOGIC (For 'Items Bought' tracking)
+      // BUYER LOGIC
       const ownership = ownershipData?.[index]?.result as [boolean, string] | undefined;
       if (ownership && ownership[0] === true) {
         feed.push({ ...item, type: 'ACQUISITION', buyer: address });
@@ -115,13 +141,27 @@ export default function DashboardPage() {
         const signature = await signMessageAsync({ message: `CHRONOS_ACCESS:${item.name.trim()}` });
         storedKey = signatureToKey(signature);
       }
-      await writeContractAsync({ address: PAYLOCK_ADDRESS, abi: PAYLOCK_ABI, functionName: 'deliverKey', args: [BigInt(item.id), item.buyer, storedKey] as any });
+      
+      await writeContractAsync({ 
+        address: activeContract, 
+        abi: PAYLOCK_ABI, 
+        functionName: 'deliverKey', 
+        args: [BigInt(item.id), item.buyer, storedKey] as any 
+      });
+      
       setToast({message: "Key Transmitted!", type: 'success'});
       fetchHistory();
-    } catch (e: any) { setToast({message: e.message || "Failed", type: 'error'}); } finally { setProcessingId(null); }
+    } catch (e: any) { 
+      setToast({message: e.message || "Failed", type: 'error'}); 
+    } finally { 
+      setProcessingId(null); 
+    }
   };
 
   if (!mounted) return null;
+
+  // FIX: Dynamic Currency Symbol
+  const currencySymbol = chain?.id === 5042002 ? "USDC" : "MOCK";
 
   return (
     <div className="min-h-screen bg-[#020e14] text-white font-display overflow-x-hidden">
@@ -133,7 +173,6 @@ export default function DashboardPage() {
             <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight drop-shadow-lg">Seller Dashboard <span className="text-primary/40 font-light">//</span> Time_Merchant</h2>
           </div>
           
-          {/* FIX: Router Push to Create Listing */}
           <button 
             onClick={() => router.push('/create-listing')}
             className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/80 text-black text-sm font-bold rounded-lg shadow-neon hover:scale-105 transition-all w-full md:w-auto justify-center"
@@ -146,8 +185,8 @@ export default function DashboardPage() {
           {/* Stats Cards */}
           <div className="bg-[#0b1a24]/60 border border-white/10 rounded-xl p-6 backdrop-blur-md hover:border-primary/50 transition-all group">
             <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-primary/10 text-primary"><Coins size={24}/></div><span className="text-xs font-bold text-primary bg-primary/10 px-2 py-1 rounded">+2.1%</span></div>
-            <p className="text-gray-400 text-sm font-medium uppercase">Total Sold Volume</p>
-            <p className="text-3xl font-mono font-bold text-white mt-1 group-hover:text-primary transition-colors">{stats.revenue.toFixed(2)} MOCK</p>
+            <p className="text-gray-400 text-sm font-medium uppercase">Total Revenue</p>
+            <p className="text-3xl font-mono font-bold text-white mt-1 group-hover:text-primary transition-colors">{stats.revenue.toFixed(2)} {currencySymbol}</p>
           </div>
           <div className="bg-[#0b1a24]/60 border border-white/10 rounded-xl p-6 backdrop-blur-md hover:border-green-500/50 transition-all group">
             <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-green-500/10 text-green-500"><Download size={24}/></div></div>
@@ -186,7 +225,7 @@ export default function DashboardPage() {
                     <tr key={i} className="group hover:bg-white/5 transition-colors">
                       <td className="py-4 px-6 text-sm font-mono text-gray-500">#{item.id.toString().padStart(4, '0')}</td>
                       <td className="py-4 px-6 text-sm font-medium text-white group-hover:text-primary transition-colors">{item.name}</td>
-                      <td className="py-4 px-6 text-sm font-mono font-bold text-white text-right">{formatEther(item.price)} MOCK</td>
+                      <td className="py-4 px-6 text-sm font-mono font-bold text-white text-right">{formatEther(item.price)} {currencySymbol}</td>
                       <td className="py-4 px-6 text-center">
                         <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border shadow-sm", 
                           item.isDelivered ? "bg-green-500/10 text-green-500 border-green-500/20" : 

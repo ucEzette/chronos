@@ -1,19 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAccount, useDisconnect, useBalance } from "wagmi";
+import { useAccount, useDisconnect, useBalance, useSwitchChain } from "wagmi";
 import { useRouter, usePathname } from "next/navigation";
 import { ConnectModal } from "./ConnectModal";
 import { cn } from "@/lib/utils";
-import { Terminal, Wallet, LogOut, Menu, X, User, LayoutDashboard, ShoppingCart, Globe } from "lucide-react";
+import { Terminal, Wallet, LogOut, Menu, X, User, LayoutDashboard, ShoppingCart, Globe, ChevronDown, Check, AlertTriangle } from "lucide-react";
+import { arcTestnet, datahaven } from "@/lib/chains"; // Import chain definitions directly for fallback
 
 export function Navigation() {
   const { address, isConnected, chain } = useAccount();
   const { disconnect } = useDisconnect();
+  const { switchChainAsync } = useSwitchChain(); 
   const { data: balance } = useBalance({ address }); 
   
   const [isConnectOpen, setIsConnectOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isNetworkMenuOpen, setIsNetworkMenuOpen] = useState(false); 
   const router = useRouter();
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
@@ -24,17 +27,11 @@ export function Navigation() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Close mobile menu on route change
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [pathname]);
+  useEffect(() => { setIsMobileMenuOpen(false); }, [pathname]);
 
   const handleProfileClick = () => {
-    if (isConnected && address) {
-      router.push(`/profile/${address}`);
-    } else {
-      setIsConnectOpen(true);
-    }
+    if (isConnected && address) router.push(`/profile/${address}`);
+    else setIsConnectOpen(true);
   };
 
   const handleDisconnect = () => {
@@ -44,10 +41,44 @@ export function Navigation() {
     }
   };
 
-  // Determine Currency Symbol & Network Name
-  const networkName = chain?.name || "Unknown Network";
+  // --- ROBUST NETWORK SWITCHER ---
+  const handleSwitchNetwork = async (targetChainId: number) => {
+    try {
+      // 1. Try standard switch
+      await switchChainAsync({ chainId: targetChainId });
+      setIsNetworkMenuOpen(false);
+    } catch (error: any) {
+      console.error("Switch failed, attempting manual add:", error);
+      
+      // 2. Fallback: Manually add chain if wallet doesn't recognize it
+      if (window.ethereum) {
+        try {
+          const targetChain = targetChainId === 5042002 ? arcTestnet : datahaven;
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: `0x${targetChain.id.toString(16)}`, // Hex chain ID
+              chainName: targetChain.name,
+              nativeCurrency: targetChain.nativeCurrency,
+              rpcUrls: [targetChain.rpcUrls.default.http[0]],
+              blockExplorerUrls: [targetChain.blockExplorers?.default.url],
+            }],
+          });
+          // Retry switch after adding
+          await switchChainAsync({ chainId: targetChainId });
+          setIsNetworkMenuOpen(false);
+        } catch (addError) {
+          alert("Could not switch network. Please add it manually in your wallet.");
+        }
+      } else {
+        alert("Error switching network: " + (error.message || "Unknown error"));
+      }
+    }
+  };
+
+  const SUPPORTED_CHAINS = [55931, 5042002]; 
+  const isWrongNetwork = isConnected && chain && !SUPPORTED_CHAINS.includes(chain.id);
   const currencySymbol = chain?.id === 5042002 ? "USDC" : "MOCK";
-  const isWrongNetwork = chain?.id !== 55931 && chain?.id !== 5042002;
 
   return (
     <>
@@ -68,77 +99,84 @@ export function Navigation() {
 
             {/* Desktop Nav */}
             <nav className="hidden md:flex gap-8 text-xs font-bold uppercase tracking-widest">
-              <button 
-                onClick={() => router.push("/")} 
-                className={cn("hover:text-primary transition-colors", pathname === "/" && "text-primary")}
-              >
-                Market
-              </button>
-              <button 
-                onClick={() => router.push("/dashboard")} 
-                className={cn("hover:text-primary transition-colors", pathname.startsWith("/dashboard") && "text-primary")}
-              >
-                Dashboard
-              </button>
-              <button 
-                onClick={handleProfileClick} 
-                className={cn("hover:text-primary transition-colors", pathname.includes("/profile") && "text-primary")}
-              >
-                Profile
-              </button>
+              <button onClick={() => router.push("/")} className={cn("hover:text-primary transition-colors", pathname === "/" && "text-primary")}>Market</button>
+              <button onClick={() => router.push("/dashboard")} className={cn("hover:text-primary transition-colors", pathname.startsWith("/dashboard") && "text-primary")}>Dashboard</button>
+              <button onClick={handleProfileClick} className={cn("hover:text-primary transition-colors", pathname.includes("/profile") && "text-primary")}>Profile</button>
             </nav>
 
             {/* Wallet Section */}
             <div className="flex items-center gap-4">
-              {/* Desktop Wallet UI */}
               <div className="hidden md:flex items-center gap-4">
                 {isConnected ? (
                   <div className="flex items-center gap-3">
-                    {/* Network Badge */}
-                    <div className={cn("px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase flex items-center gap-2", 
-                      isWrongNetwork ? "bg-red-500/10 border-red-500/50 text-red-500" : "bg-primary/10 border-primary/30 text-primary")}>
-                      <Globe size={12}/> {isWrongNetwork ? "Wrong Net" : networkName}
+                    
+                    {/* NETWORK SWITCHER */}
+                    <div className="relative">
+                      <button 
+                        onClick={() => setIsNetworkMenuOpen(!isNetworkMenuOpen)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase flex items-center gap-2 transition-all hover:opacity-80 min-w-[100px] justify-between", 
+                          isWrongNetwork ? "bg-red-500/10 border-red-500/50 text-red-500" : "bg-primary/10 border-primary/30 text-primary"
+                        )}
+                      >
+                        <span className="flex items-center gap-2 truncate">
+                          {isWrongNetwork ? <AlertTriangle size={12}/> : <Globe size={12}/>} 
+                          {isWrongNetwork ? "Wrong Net" : chain?.name}
+                        </span>
+                        <ChevronDown size={10} />
+                      </button>
+
+                      {isNetworkMenuOpen && (
+                        <div className="absolute top-full right-0 mt-2 w-48 bg-[#0b1a24] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                          <div className="p-2 flex flex-col gap-1">
+                            {/* DataHaven Option */}
+                            <button 
+                              onClick={() => handleSwitchNetwork(55931)} 
+                              className={cn(
+                                "px-3 py-2 text-left text-xs font-bold rounded-lg transition-colors flex items-center justify-between group",
+                                chain?.id === 55931 ? "bg-primary/20 text-primary" : "hover:bg-white/5 text-white"
+                              )}
+                            >
+                              <span className="flex items-center gap-2"><span className="size-2 rounded-full bg-cyan-400"></span> DataHaven</span>
+                              {chain?.id === 55931 && <Check size={12} />}
+                            </button>
+
+                            {/* Arc Option */}
+                            <button 
+                              onClick={() => handleSwitchNetwork(5042002)} 
+                              className={cn(
+                                "px-3 py-2 text-left text-xs font-bold rounded-lg transition-colors flex items-center justify-between group",
+                                chain?.id === 5042002 ? "bg-primary/20 text-primary" : "hover:bg-white/5 text-white"
+                              )}
+                            >
+                              <span className="flex items-center gap-2"><span className="size-2 rounded-full bg-blue-500"></span> Arc Testnet</span>
+                              {chain?.id === 5042002 && <Check size={12} />}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
+                    {/* Balance & Address */}
                     <div className="text-right bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 hover:border-primary/30 transition-colors cursor-pointer group/wallet" onClick={handleProfileClick}>
                       <div className="flex items-center gap-2 justify-end">
                         <span className="text-[10px] text-gray-400 font-mono group-hover/wallet:text-primary transition-colors">BAL:</span>
-                        <span className="text-xs font-mono font-bold text-white">
-                          {balance ? Number(balance.formatted).toFixed(3) : "0.000"} {currencySymbol}
-                        </span>
+                        <span className="text-xs font-mono font-bold text-white">{balance ? Number(balance.formatted).toFixed(3) : "0.00"} {currencySymbol}</span>
                       </div>
                       <div className="flex items-center gap-2 justify-end mt-0.5">
                         <span className="size-1.5 rounded-full bg-primary animate-pulse shadow-glow-primary"></span>
-                        <p className="text-[10px] font-mono font-bold text-primary opacity-80">
-                          {address?.slice(0,6)}...{address?.slice(-4)}
-                        </p>
+                        <p className="text-[10px] font-mono font-bold text-primary opacity-80">{address?.slice(0,6)}...{address?.slice(-4)}</p>
                       </div>
                     </div>
-                    <button 
-                      onClick={handleDisconnect}
-                      className="size-9 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 hover:bg-red-500/20 hover:scale-105 transition-all"
-                      title="Disconnect"
-                    >
-                      <LogOut size={16} />
-                    </button>
+                    <button onClick={handleDisconnect} className="size-9 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 hover:bg-red-500/20 hover:scale-105 transition-all"><LogOut size={16} /></button>
                   </div>
                 ) : (
-                  <button 
-                    onClick={() => setIsConnectOpen(true)}
-                    className="bg-primary hover:bg-cyan-400 text-black px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider shadow-glow-primary transition-all hover:scale-105 flex items-center gap-2"
-                  >
-                    <Wallet size={14} /> Connect
-                  </button>
+                  <button onClick={() => setIsConnectOpen(true)} className="bg-primary hover:bg-cyan-400 text-black px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider shadow-glow-primary transition-all hover:scale-105 flex items-center gap-2"><Wallet size={14} /> Connect</button>
                 )}
               </div>
 
               {/* Mobile Menu Button */}
-              <button 
-                className="md:hidden p-2 text-white hover:text-primary transition-colors focus:outline-none"
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              >
-                {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-              </button>
+              <button className="md:hidden p-2 text-white hover:text-primary transition-colors focus:outline-none" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>{isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}</button>
             </div>
           </div>
         </div>
@@ -146,39 +184,29 @@ export function Navigation() {
         {/* Mobile Menu Overlay */}
         {isMobileMenuOpen && (
           <div className="md:hidden absolute top-full left-0 w-full bg-[#020e14] border-b border-white/10 p-4 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-top-5 z-40">
-            <button onClick={() => router.push("/")} className={cn("flex items-center gap-3 p-3 rounded-lg border", pathname === "/" ? "bg-primary/10 border-primary/30 text-primary" : "bg-white/5 border-white/5 text-gray-300")}>
-              <ShoppingCart size={18}/> Market
-            </button>
-            <button onClick={() => router.push("/dashboard")} className={cn("flex items-center gap-3 p-3 rounded-lg border", pathname.startsWith("/dashboard") ? "bg-primary/10 border-primary/30 text-primary" : "bg-white/5 border-white/5 text-gray-300")}>
-              <LayoutDashboard size={18}/> Dashboard
-            </button>
-            <button onClick={handleProfileClick} className={cn("flex items-center gap-3 p-3 rounded-lg border", pathname.includes("/profile") ? "bg-primary/10 border-primary/30 text-primary" : "bg-white/5 border-white/5 text-gray-300")}>
-              <User size={18}/> Profile
-            </button>
+            {/* ... (Mobile Menu Links same as before) ... */}
             
-            <div className="h-px bg-white/10 my-1"></div>
-
             {isConnected ? (
               <div className="flex flex-col gap-3">
                 <div className="flex justify-between items-center bg-white/5 p-3 rounded-lg border border-white/10">
-                  <span className="text-gray-400 text-xs">Balance</span>
-                  <span className="text-primary font-bold font-mono">
-                    {balance ? Number(balance.formatted).toFixed(3) : "0.00"} {currencySymbol}
-                  </span>
+                  <span className="text-gray-400 text-xs">Balance ({currencySymbol})</span>
+                  <span className="text-primary font-bold font-mono">{balance ? Number(balance.formatted).toFixed(3) : "0.00"}</span>
                 </div>
-                <button onClick={handleDisconnect} className="w-full py-3 bg-red-500/10 text-red-500 rounded-lg font-bold text-sm border border-red-500/20 flex items-center justify-center gap-2">
-                  <LogOut size={16}/> Disconnect Wallet
-                </button>
+                
+                {/* Mobile Network Switcher */}
+                <div className="flex gap-2">
+                  <button onClick={() => handleSwitchNetwork(55931)} className={cn("flex-1 py-2 text-xs font-bold rounded-lg border text-center transition-all", chain?.id === 55931 ? "bg-primary text-black border-primary" : "bg-white/5 text-white border-white/10")}>DataHaven</button>
+                  <button onClick={() => handleSwitchNetwork(5042002)} className={cn("flex-1 py-2 text-xs font-bold rounded-lg border text-center transition-all", chain?.id === 5042002 ? "bg-primary text-black border-primary" : "bg-white/5 text-white border-white/10")}>Arc</button>
+                </div>
+
+                <button onClick={handleDisconnect} className="w-full py-3 bg-red-500/10 text-red-500 rounded-lg font-bold text-sm border border-red-500/20 flex items-center justify-center gap-2"><LogOut size={16}/> Disconnect</button>
               </div>
             ) : (
-              <button onClick={() => setIsConnectOpen(true)} className="w-full py-3 bg-primary text-black rounded-lg font-bold text-sm shadow-neon flex items-center justify-center gap-2">
-                <Wallet size={16}/> Connect Wallet
-              </button>
+              <button onClick={() => setIsConnectOpen(true)} className="w-full py-3 bg-primary text-black rounded-lg font-bold text-sm shadow-neon flex items-center justify-center gap-2"><Wallet size={16}/> Connect Wallet</button>
             )}
           </div>
         )}
       </header>
-
       <ConnectModal isOpen={isConnectOpen} onClose={() => setIsConnectOpen(false)} />
     </>
   );

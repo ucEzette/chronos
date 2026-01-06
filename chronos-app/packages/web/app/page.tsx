@@ -1,24 +1,24 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useAccount, useReadContract, useWriteContract } from "wagmi";
-import { formatEther } from "viem";
+import { useAccount, useWriteContract, useSwitchChain } from "wagmi";
+import { formatEther, createPublicClient, http } from "viem";
 import Link from "next/link";
-import { PAYLOCK_ABI, getContractAddress } from "@/lib/contracts"; // Updated Import
+import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts"; // Use Address Map
+import { datahaven, arcTestnet } from "@/lib/chains"; // Import Chains
 import { Navigation } from "../components/Navigation";
 import { fetchIPFS } from "@/lib/ipfs"; 
 import { getCryptoPrices } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { 
-  Search, Music, Video, FileText, Lock, Play, Database, 
-  ChevronDown, Archive, ChevronUp, User, Info, Box, Pause, RefreshCw, Share2, Check
+  Search, Music, Video, FileText, Play, Archive, ChevronDown, 
+  ChevronUp, User, Info, Pause, RefreshCw, Share2, Check, Globe, AlertTriangle
 } from "lucide-react";
 
-// --- SPLASH SCREEN ---
+// --- SPLASH SCREEN (Unchanged) ---
 function SplashScreen({ onEnter }: { onEnter: () => void }) {
   const [progress, setProgress] = useState(0);
   const [loaded, setLoaded] = useState(false);
-
   useEffect(() => {
     const interval = setInterval(() => {
       setProgress(prev => {
@@ -28,10 +28,8 @@ function SplashScreen({ onEnter }: { onEnter: () => void }) {
     }, 200);
     return () => clearInterval(interval);
   }, []);
-
   return (
     <div className="fixed inset-0 bg-[#050b14] flex flex-col items-center justify-center relative overflow-hidden z-[100] font-display text-primary select-none px-4">
-      {/* ... (Background Effects) ... */}
       <div className="relative z-10 flex flex-col items-center w-full max-w-sm">
         <h1 className="text-4xl md:text-5xl font-black tracking-[0.2em] mb-4 text-transparent bg-clip-text bg-gradient-to-b from-white to-primary drop-shadow-[0_0_10px_rgba(0,229,255,0.5)] text-center">CHRONOS</h1>
         {!loaded ? (
@@ -52,20 +50,41 @@ function MarketplaceCard({ item }: { item: any }) {
   const [isBuying, setIsBuying] = useState(false);
   const [copied, setCopied] = useState(false);
   
-  const { chain } = useAccount(); // Get chain
+  const { chain } = useAccount(); 
   const { writeContractAsync } = useWriteContract();
+  const { switchChainAsync } = useSwitchChain();
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
+  // Parse Metadata & Fix Preview Image
   useEffect(() => {
     const loadMetadata = async () => {
       if (!item.previewCid) return;
       try {
         const cid = item.previewCid.replace("ipfs://", "");
         const blob = await fetchIPFS(cid);
-        try { const text = await blob.text(); const json = JSON.parse(text); setMeta({ ...json, image: json.image ? `https://gateway.pinata.cloud/ipfs/${json.image.replace("ipfs://", "")}` : null, animation_url: json.animation_url ? `https://gateway.pinata.cloud/ipfs/${json.animation_url.replace("ipfs://", "")}` : null }); } 
-        catch { setMeta({ image: `https://gateway.pinata.cloud/ipfs/${cid}` }); }
-      } catch (e) { console.error("Meta error", e); }
+        
+        // Handle JSON Metadata
+        if (blob.type.includes("json")) {
+          const text = await blob.text();
+          const json = JSON.parse(text);
+          setMeta({
+            ...json,
+            // Ensure image URL is valid gateway link
+            image: json.image ? `https://gateway.pinata.cloud/ipfs/${json.image.replace("ipfs://", "")}` : null,
+            animation_url: json.animation_url ? `https://gateway.pinata.cloud/ipfs/${json.animation_url.replace("ipfs://", "")}` : null
+          });
+        } 
+        // Handle Direct Image/Media File
+        else {
+          const url = URL.createObjectURL(blob);
+          setMeta({ image: url });
+        }
+      } catch (e) { 
+        // Fallback if IPFS fetch fails
+        setMeta({ image: `https://gateway.pinata.cloud/ipfs/${item.previewCid.replace("ipfs://", "")}` }); 
+      }
     };
     loadMetadata();
   }, [item.previewCid]);
@@ -83,21 +102,37 @@ function MarketplaceCard({ item }: { item: any }) {
     else if (type.includes("AUDIO") && audioRef.current) { isPlaying ? audioRef.current.pause() : audioRef.current.play(); setIsPlaying(!isPlaying); }
   };
 
-  // FIX: Multi-Chain Buy Logic
+  // --- CROSS-CHAIN BUY LOGIC ---
   const handleBuy = async () => {
     if(isSoldOut) return;
-    if(!confirm(`Buy ${item.name} for ${formatEther(item.price)} MOCK?`)) return;
+
+    // 1. Check Network
+    if (chain?.id !== item.chainId) {
+      if(confirm(`This item is on ${item.chainName}. Switch network to buy?`)) {
+        try {
+          await switchChainAsync({ chainId: item.chainId });
+          // User needs to click buy again after switch (safest UX)
+          return; 
+        } catch (e) {
+          alert("Network switch failed. Please switch manually.");
+          return;
+        }
+      }
+      return;
+    }
+
+    // 2. Confirm & Buy
+    if(!confirm(`Buy ${item.name} for ${formatEther(item.price)} ${item.currency}?`)) return;
     
     setIsBuying(true);
     try {
-      const activeContract = getContractAddress(chain?.id); // Dynamic Address
-      
+      const contractAddr = CONTRACT_ADDRESSES[item.chainId];
       await writeContractAsync({
-        address: activeContract,
+        address: contractAddr,
         abi: PAYLOCK_ABI,
         functionName: 'buyItem',
         args: [BigInt(item.id)],
-        value: item.price // Send required value
+        value: item.price
       });
       alert("Purchase Successful! Check Dashboard.");
     } catch (e: any) {
@@ -107,9 +142,8 @@ function MarketplaceCard({ item }: { item: any }) {
     }
   };
 
-  // FEATURE: Share Link
   const handleShare = () => {
-    const url = `${window.location.origin}/?id=${item.id}`;
+    const url = `${window.location.origin}/item/${item.id}?chain=${item.chainId}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -121,15 +155,36 @@ function MarketplaceCard({ item }: { item: any }) {
         <button onClick={handleShare} className="p-1 rounded bg-black/60 text-white hover:text-primary transition-colors" title="Copy Link">
             {copied ? <Check size={14}/> : <Share2 size={14}/>}
         </button>
+        {/* NETWORK BADGE */}
+        <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold border shadow-sm backdrop-blur-md", item.chainId === 55931 ? "bg-cyan-900/80 text-cyan-400 border-cyan-500/30" : "bg-blue-900/80 text-blue-400 border-blue-500/30")}>
+          <Globe size={10}/> {item.chainId === 55931 ? "DH" : "ARC"}
+        </span>
         <span className="inline-flex items-center rounded-full bg-black/80 backdrop-blur-md px-2.5 py-1 text-[10px] font-bold text-primary border border-primary/30 shadow-sm">{type}</span>
       </div>
       
-      {/* ... [Media Preview Same as Before] ... */}
+      {/* PREVIEW AREA */}
       <div className={cn("relative aspect-video w-full overflow-hidden bg-gray-900 group-hover:brightness-110 transition-all shrink-0", isSoldOut && "grayscale opacity-60")}>
         <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent opacity-80 z-10 pointer-events-none" />
-        {meta?.animation_url && type.includes("VIDEO") ? <video ref={videoRef} src={meta.animation_url} className="w-full h-full object-cover" loop muted={!isPlaying} poster={meta?.image}/> : meta?.image ? <img src={meta.image} alt={item.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-white/5"><FileText size={40} className="text-white/20"/></div>}
+        
+        {/* Render Logic: Video vs Image vs Audio */}
+        {meta?.animation_url && type.includes("VIDEO") ? (
+          <video ref={videoRef} src={meta.animation_url} className="w-full h-full object-cover" loop muted={!isPlaying} poster={meta?.image}/>
+        ) : meta?.image ? (
+          <img src={meta.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" onError={(e) => (e.target as HTMLImageElement).src = "https://placehold.co/600x400/000/FFF?text=No+Preview"} />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-white/5"><FileText size={40} className="text-white/20"/></div>
+        )}
+
         {meta?.animation_url && type.includes("AUDIO") && <audio ref={audioRef} src={meta.animation_url} loop />}
-        {!isSoldOut && <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-20"><button onClick={togglePlay} className="bg-primary text-black rounded-full p-4 shadow-neon hover:scale-110 transition-transform active:scale-95">{isPlaying ? <Pause size={24} fill="currentColor"/> : <Play size={24} fill="currentColor"/>}</button></div>}
+        
+        {!isSoldOut && (type.includes("VIDEO") || type.includes("AUDIO")) && (
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-20">
+            <button onClick={togglePlay} className="bg-primary text-black rounded-full p-4 shadow-neon hover:scale-110 transition-transform active:scale-95">
+              {isPlaying ? <Pause size={24} fill="currentColor"/> : <Play size={24} fill="currentColor"/>}
+            </button>
+          </div>
+        )}
+
         {isSoldOut && <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px] flex items-center justify-center z-30 pointer-events-none"><div className="border-4 border-white text-white px-6 py-2 text-2xl font-black tracking-widest uppercase -rotate-12 mix-blend-overlay">SOLD OUT</div></div>}
       </div>
 
@@ -146,7 +201,10 @@ function MarketplaceCard({ item }: { item: any }) {
         {showDetails && <div className="bg-white/5 p-3 rounded-lg text-xs text-white/70 animate-in slide-in-from-top-2 font-mono border border-white/10"><h4 className="flex items-center gap-1 font-bold text-white mb-1 uppercase"><Info size={12}/> Description</h4><p className="mb-2 leading-relaxed opacity-80">{meta?.description || "No description."}</p></div>}
         
         <div className="mt-auto pt-3 border-t border-white/5 flex items-center justify-between gap-3">
-          <div className="flex flex-col"><span className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Price</span><span className="text-lg font-mono font-bold text-white tracking-tight">{formatEther(item.price)} MOCK</span></div>
+          <div className="flex flex-col">
+            <span className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Price</span>
+            <span className="text-lg font-mono font-bold text-white tracking-tight">{formatEther(item.price)} {item.currency}</span>
+          </div>
           <div className="flex gap-2">
             <button onClick={() => setShowDetails(!showDetails)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors border border-white/10">{showDetails ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>
             <button 
@@ -163,15 +221,18 @@ function MarketplaceCard({ item }: { item: any }) {
   );
 }
 
+// --- MAIN PAGE ---
 export default function MarketplacePage() {
   const [mounted, setMounted] = useState(false);
   const [showSplash, setShowSplash] = useState(false);
   const [prices, setPrices] = useState({ BTC: 0, ETH: 0, SOL: 0 });
-  const { isConnected, chain } = useAccount(); // Get Chain
+  const { isConnected } = useAccount();
   const [filter, setFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("NEWEST");
   const [view, setView] = useState<'ACTIVE' | 'SOLD'>('ACTIVE');
+  const [allItems, setAllItems] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Fetch Real Prices
   useEffect(() => {
@@ -187,14 +248,46 @@ export default function MarketplacePage() {
     else if (!isConnected) { sessionStorage.removeItem("chronos_splash_seen"); setShowSplash(false); }
   }, [isConnected]);
 
-  // FIX: Multi-Chain Read
-  const activeContract = getContractAddress(chain?.id);
-  const { data: rawItems } = useReadContract({ 
-    address: activeContract, 
-    abi: PAYLOCK_ABI, 
-    functionName: "getMarketplaceItems" 
-  });
-  const allItems = (rawItems as any[]) || [];
+  // --- MULTI-CHAIN DATA AGGREGATION ---
+  useEffect(() => {
+    const fetchMultiChainData = async () => {
+      setIsLoading(true);
+      const chains = [datahaven, arcTestnet];
+      const aggregatedItems: any[] = [];
+
+      await Promise.all(chains.map(async (chain) => {
+        try {
+          const client = createPublicClient({ chain, transport: http() });
+          const contractAddr = CONTRACT_ADDRESSES[chain.id];
+          
+          if (!contractAddr) return;
+
+          const items = await client.readContract({
+            address: contractAddr,
+            abi: PAYLOCK_ABI,
+            functionName: 'getMarketplaceItems',
+          }) as any[];
+
+          // Tag items with their source chain
+          const taggedItems = items.map(item => ({
+            ...item,
+            chainId: chain.id,
+            chainName: chain.name,
+            currency: chain.nativeCurrency.symbol
+          }));
+
+          aggregatedItems.push(...taggedItems);
+        } catch (e) {
+          console.error(`Error fetching from ${chain.name}:`, e);
+        }
+      }));
+
+      setAllItems(aggregatedItems);
+      setIsLoading(false);
+    };
+
+    fetchMultiChainData();
+  }, []);
 
   const filteredItems = useMemo(() => {
     let items = allItems.filter((item) => {
@@ -250,7 +343,13 @@ export default function MarketplacePage() {
 
         {/* Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 auto-rows-fr">
-          {filteredItems.length > 0 ? (filteredItems.map((item, i) => (<MarketplaceCard key={i} item={item} />))) : (<div className="col-span-full flex flex-col items-center justify-center py-32 text-center border-2 border-dashed border-white/10 rounded-2xl bg-white/5"><div className="p-4 rounded-full bg-white/5 text-white/20 mb-4"><Archive size={48} /></div><h3 className="text-xl font-bold text-white mb-2">No Artifacts Found</h3><p className="text-white/40 text-sm max-w-md mx-auto">{view === 'ACTIVE' ? "No active listings found." : "No sold-out items found."}</p></div>)}
+          {isLoading ? (
+             <div className="col-span-full py-40 text-center"><RefreshCw className="animate-spin mx-auto text-primary mb-4" size={40}/><p className="text-white/60 font-mono text-sm">Scanning Multi-Chain Ledger...</p></div>
+          ) : filteredItems.length > 0 ? (
+             filteredItems.map((item, i) => (<MarketplaceCard key={`${item.chainId}-${i}`} item={item} />))
+          ) : (
+             <div className="col-span-full flex flex-col items-center justify-center py-32 text-center border-2 border-dashed border-white/10 rounded-2xl bg-white/5"><div className="p-4 rounded-full bg-white/5 text-white/20 mb-4"><Archive size={48} /></div><h3 className="text-xl font-bold text-white mb-2">No Artifacts Found</h3><p className="text-white/40 text-sm max-w-md mx-auto">{view === 'ACTIVE' ? "No active listings found on any network." : "No sold-out items found."}</p></div>
+          )}
         </div>
       </main>
 

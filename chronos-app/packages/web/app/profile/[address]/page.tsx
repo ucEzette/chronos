@@ -2,283 +2,185 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useAccount, useBalance, useEnsName, useEnsAvatar, useDisconnect, useReadContract, useReadContracts, usePublicClient } from "wagmi";
-import { formatEther, parseAbiItem } from "viem";
+import { useAccount, useBalance, useEnsName, useEnsAvatar, useDisconnect } from "wagmi";
+import { formatEther, parseAbiItem, createPublicClient, http } from "viem";
 import { Navigation } from "../../../components/Navigation";
-import { PAYLOCK_ABI, PAYLOCK_ADDRESS } from "../../../lib/contracts"; 
+import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "../../../lib/contracts"; // Use Address Map
+import { datahaven, arcTestnet } from "../../../lib/chains"; // Import Chains
 import { fetchIPFS } from "../../../lib/ipfs";
 import { decryptFile } from "@/lib/crypto";
 import { cn } from "@/lib/utils";
+import { ProfileInventory } from "../ProfileInventory";
 import { 
-  Settings, Power, Copy, Wallet, Activity, Search, MoreVertical, 
+  Settings, Power, Copy, Wallet, Activity, Search, 
   CheckCircle2, RefreshCw, Download, Music, Video, FileText, User, 
   Clock, ArrowUpRight, ArrowDownLeft, Code, Twitter, Upload, Edit3, 
-  Link as LinkIcon, X, Camera, ShieldCheck, Sparkles, Image as ImageIcon,
-  Lock, EyeOff, Shield, Ban
+  Link as LinkIcon, X, Camera, Shield, Ban, Globe
 } from "lucide-react";
 
-// --- HELPERS ---
-const formatTimeAgo = (blockTimestamp: number | undefined) => {
-  if (!blockTimestamp) return "Pending...";
-  const seconds = Math.floor((Date.now() - blockTimestamp * 1000) / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return new Date(blockTimestamp * 1000).toLocaleDateString();
+// --- MULTI-CHAIN HELPERS ---
+const SUPPORTED_CHAINS = [datahaven, arcTestnet];
+
+// Helper to create a client for a specific chain on the fly
+const getClientForChain = (chain: any) => createPublicClient({ chain, transport: http() });
+
+const formatTimeAgo = (timestamp: number | undefined) => {
+  if (!timestamp) return "Pending...";
+  const diff = Math.floor((Date.now() - timestamp * 1000) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return new Date(timestamp * 1000).toLocaleDateString();
 };
 
-// --- COMPONENT: AVATAR MODAL ---
-function AvatarModal({ isOpen, onClose, onSelect }: { isOpen: boolean, onClose: () => void, onSelect: (url: string) => void }) {
-  const [activeTab, setActiveTab] = useState<'GENERATIVE' | 'UPLOAD'>('GENERATIVE');
-  const [uploading, setUploading] = useState(false);
-  const warriors = useMemo(() => Array.from({ length: 8 }).map((_, i) => `https://api.dicebear.com/9.x/adventurer/svg?seed=Warrior_${i}_${Math.random().toString(36).substring(7)}&backgroundColor=b6e3f4,c0aede,d1d4f9`), [isOpen]);
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    const reader = new FileReader();
-    reader.onloadend = () => { onSelect(reader.result as string); setUploading(false); onClose(); };
-    reader.readAsDataURL(file);
-  };
-
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-[#0b1a24] border border-white/10 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl relative">
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"><X size={20}/></button>
-        <div className="p-6 border-b border-white/5 bg-white/5"><h3 className="text-xl font-bold text-white uppercase tracking-wide flex items-center gap-2"><Camera size={20} className="text-primary"/> Identity Module</h3></div>
-        <div className="flex border-b border-white/5">
-          <button onClick={() => setActiveTab('GENERATIVE')} className={cn("flex-1 py-4 text-xs font-bold uppercase tracking-wider transition-colors", activeTab === 'GENERATIVE' ? "bg-white/5 text-primary border-b-2 border-primary" : "text-gray-500 hover:text-white")}>Generative</button>
-          <button onClick={() => setActiveTab('UPLOAD')} className={cn("flex-1 py-4 text-xs font-bold uppercase tracking-wider transition-colors", activeTab === 'UPLOAD' ? "bg-white/5 text-primary border-b-2 border-primary" : "text-gray-500 hover:text-white")}>Upload</button>
-        </div>
-        <div className="p-6 min-h-[300px] bg-[#020e14]">
-          {activeTab === 'GENERATIVE' ? (
-            <div className="grid grid-cols-4 gap-4">{warriors.map((url, i) => (<button key={i} onClick={() => { onSelect(url); onClose(); }} className="aspect-square rounded-xl bg-white/5 hover:bg-primary/20 border border-white/5 hover:border-primary transition-all p-1 overflow-hidden group relative"><img src={url} className="w-full h-full object-cover group-hover:scale-110 transition-transform" /></button>))}</div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full gap-4 border-2 border-dashed border-white/10 rounded-xl bg-white/5 p-8 relative hover:border-primary/50 transition-colors group">
-              {uploading ? <RefreshCw className="animate-spin text-primary" size={32} /> : <><div className="p-4 rounded-full bg-primary/10 text-primary mb-2 group-hover:scale-110 transition-transform"><Upload size={32}/></div><p className="text-sm text-white font-bold">Click to Upload Image</p><input type="file" accept="image/*" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" /></>}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// --- SUB-COMPONENT: INVENTORY CARD ---
-function InventoryItem({ item, onDecrypt }: { item: any, onDecrypt: (item: any) => void }) {
-  const [meta, setMeta] = useState<{ name: string, type: string, image: string } | null>(null);
-
-  useEffect(() => {
-    const loadMeta = async () => {
-      try {
-        const cid = item.previewCid.replace("ipfs://", "");
-        const blob = await fetchIPFS(cid);
-        const text = await blob.text();
-        try { const json = JSON.parse(text); setMeta({ name: json.name || item.name, type: item.fileType, image: json.image?.replace("ipfs://", "") }); } 
-        catch { setMeta({ name: item.name, type: item.fileType, image: cid }); }
-      } catch (e) { console.error("Meta load fail", e); }
-    };
-    loadMeta();
-  }, [item]);
-
-  const imageUrl = meta?.image ? `https://gateway.pinata.cloud/ipfs/${meta.image}` : null;
-
-  return (
-    <div className="rounded-lg border border-white/5 bg-[#0b1a24]/60 backdrop-blur-md p-4 group hover:border-primary/30 transition-all duration-300 relative overflow-hidden flex flex-col h-full">
-      <div className="flex gap-4 items-start mb-4">
-        <div className="relative h-14 w-14 rounded border border-white/10 flex items-center justify-center text-primary bg-[#0f172a] overflow-hidden shrink-0">
-          {imageUrl ? <img src={imageUrl} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" /> : <FileText size={24}/>}
-        </div>
-        <div className="overflow-hidden min-w-0">
-          <h4 className="text-white font-bold text-sm leading-tight mb-1 truncate group-hover:text-primary transition-colors">{meta?.name || "Loading..."}</h4>
-          <p className="text-[10px] text-gray-400 font-mono mb-1 truncate">ID: {item.id.toString()} • {meta?.type}</p>
-          <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border inline-block", item.hasKey ? "text-green-400 bg-green-500/10 border-green-500/20" : "text-yellow-400 bg-yellow-500/10 border-yellow-500/20")}>{item.hasKey ? "UNLOCKED" : "WAITING FOR KEY"}</span>
-        </div>
-      </div>
-      <button onClick={() => onDecrypt(item)} disabled={!item.hasKey} className={cn("w-full py-2 mt-auto rounded text-[10px] font-bold flex items-center justify-center gap-2 transition-colors uppercase tracking-wider", item.hasKey ? "bg-white/5 hover:bg-white/10 text-white cursor-pointer" : "bg-white/5 text-gray-500 cursor-not-allowed")}>
-        <Download size={14}/> {item.hasKey ? "Decrypt File" : "Pending Delivery"}
-      </button>
-    </div>
-  );
-}
-
-// --- MAIN PROFILE PAGE ---
 export default function ProfilePage() {
   const params = useParams();
   const router = useRouter();
   const { address: connectedAddress } = useAccount();
   const { disconnect } = useDisconnect();
-  const publicClient = usePublicClient();
   
   const profileAddress = (params?.address as string) || "";
   const isOwnProfile = connectedAddress?.toLowerCase() === profileAddress.toLowerCase();
 
+  // Basic Hooks (Active Chain Only for Balance - optional to aggregate balances too)
   const { data: balanceData } = useBalance({ address: profileAddress as `0x${string}` });
   const { data: ensName } = useEnsName({ address: profileAddress as `0x${string}` });
   const { data: ensAvatar } = useEnsAvatar({ name: ensName! });
 
-  const { data: rawItems } = useReadContract({ address: PAYLOCK_ADDRESS, abi: PAYLOCK_ABI, functionName: 'getMarketplaceItems' });
-  const allItems = (rawItems as any[]) || [];
-
-  const { data: ownershipData } = useReadContracts({
-    contracts: allItems.map((item) => ({ address: PAYLOCK_ADDRESS, abi: PAYLOCK_ABI, functionName: 'checkOwnership', args: [item.id, profileAddress] })),
-    query: { enabled: allItems.length > 0 }
-  });
-
+  // State
   const [activeTab, setActiveTab] = useState<'INVENTORY' | 'TRANSACTIONS' | 'SETTINGS'>('INVENTORY');
+  const [inventory, setInventory] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [loadingTx, setLoadingTx] = useState(false);
-  const [settings, setSettings] = useState({ autoDecrypt: false, ghostMode: false, displayName: "", avatarUrl: "", twitterHandle: "" });
+  const [isLoading, setIsLoading] = useState(true);
   const [reputation, setReputation] = useState(50);
-  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [verifyingTwitter, setVerifyingTwitter] = useState(false);
+  const [settings, setSettings] = useState({ displayName: "", avatarUrl: "", twitterHandle: "", ghostMode: false });
 
-  // 1. REPUTATION ALGORITHM
+  // --- AGGREGATED DATA FETCHING ---
   useEffect(() => {
-    if (!publicClient || !profileAddress) return;
-    const calculateReputation = async () => {
+    if (!profileAddress) return;
+
+    const fetchAllChainData = async () => {
+      setIsLoading(true);
+      const allItems: any[] = [];
+      const allTxs: any[] = [];
+      let totalSales = 0;
+      let totalCancels = 0;
+
       try {
-        const fromBlock = BigInt(0);
-        // Find sales where I am the seller
-        // This requires filtering ItemPurchased logs where the item's seller matches profileAddress
-        // Since we can't easily filter logs by item parameters without indexing, we approximate:
-        // We look at all Purchase events, and check if the item ID belongs to an item sold by this user.
-        
-        const purchases = await publicClient.getLogs({ 
-            address: PAYLOCK_ADDRESS, 
-            event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), 
-            fromBlock 
-        });
-        
-        const cancels = await publicClient.getLogs({ 
-            address: PAYLOCK_ADDRESS, 
-            event: parseAbiItem('event ItemCanceled(uint256 indexed id, address indexed seller)'), 
-            args: { seller: profileAddress as `0x${string}` }, 
-            fromBlock 
-        });
+        // Iterate over all supported chains
+        await Promise.all(SUPPORTED_CHAINS.map(async (chain) => {
+          const client = getClientForChain(chain);
+          const contractAddr = CONTRACT_ADDRESSES[chain.id];
+          
+          if(!contractAddr) return;
 
-        // Map Item IDs to their sellers from the fetched items list
-        const myItemIds = new Set(allItems.filter((item: any) => item.seller.toLowerCase() === profileAddress.toLowerCase()).map((item: any) => item.id.toString()));
-        
-        // Count successful sales
-        const mySalesCount = purchases.filter(log => myItemIds.has(log.args.id?.toString() || "")).length;
-        
-        // Formula: 50 base + (Sales * 5) - (Cancels * 10)
-        let score = 50 + (mySalesCount * 5) - (cancels.length * 10);
-        setReputation(Math.min(Math.max(score, 0), 100)); 
-      } catch (e) { console.error("Reputation error", e); }
-    };
-    calculateReputation();
-  }, [publicClient, profileAddress, allItems]);
+          // 1. Fetch Items
+          try {
+            const rawItems = await client.readContract({
+              address: contractAddr,
+              abi: PAYLOCK_ABI,
+              functionName: 'getMarketplaceItems',
+            }) as any[];
 
-  // 2. TRANSACTION HISTORY (Direct Fetch)
-  useEffect(() => {
-    if (!publicClient || !profileAddress || activeTab !== 'TRANSACTIONS') return;
-    
-    const fetchTx = async () => {
-      setLoadingTx(true);
-      try {
-        const currentBlock = await publicClient.getBlockNumber();
-        // Look back 100k blocks (approx 2 weeks on mainnet, longer on testnets) or start from 0
-        const lookback = BigInt(100000); 
-        const fromBlock = (currentBlock - lookback) > BigInt(0) ? (currentBlock - lookback) : BigInt(0);
-        
-        const addr = profileAddress as `0x${string}`;
+            // Check ownership for each item on THIS chain
+            // We use multicast if possible, but map for simplicity here
+            const enrichedItems = await Promise.all(rawItems.map(async (item) => {
+              const ownership = await client.readContract({
+                address: contractAddr,
+                abi: PAYLOCK_ABI,
+                functionName: 'checkOwnership',
+                args: [item.id, profileAddress as `0x${string}`]
+              }) as [boolean, string];
 
-        // Fetch logs for various event types involving this user
-        const [purchases, listings, deliveries, cancels] = await Promise.all([
-          // Purchases I made
-          publicClient.getLogs({ 
-            address: PAYLOCK_ADDRESS, 
-            event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), 
-            args: { buyer: addr }, 
-            fromBlock 
-          }),
-          // Listings I created
-          publicClient.getLogs({ 
-            address: PAYLOCK_ADDRESS, 
-            event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price)'), 
-            args: { seller: addr }, 
-            fromBlock 
-          }),
-          // Keys I received
-          publicClient.getLogs({ 
-            address: PAYLOCK_ADDRESS, 
-            event: parseAbiItem('event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey)'), 
-            args: { buyer: addr }, 
-            fromBlock 
-          }),
-          // Cancellations I made
-          publicClient.getLogs({ 
-            address: PAYLOCK_ADDRESS, 
-            event: parseAbiItem('event ItemCanceled(uint256 indexed id, address indexed seller)'), 
-            args: { seller: addr }, 
-            fromBlock 
-          })
-        ]);
+              // If user bought it, add to inventory
+              if (ownership[0]) {
+                return {
+                  ...item,
+                  chainId: chain.id,
+                  chainName: chain.name,
+                  currency: chain.nativeCurrency.symbol,
+                  hasKey: !!(ownership[1] && ownership[1].length > 0),
+                  receivedKey: ownership[1]
+                };
+              }
+              return null;
+            }));
+            
+            allItems.push(...enrichedItems.filter(Boolean));
 
-        // Fetch timestamps for all found blocks to display "Time Ago"
-        const blockNumbers = new Set([
-            ...purchases.map(l => l.blockNumber),
-            ...listings.map(l => l.blockNumber),
-            ...deliveries.map(l => l.blockNumber),
-            ...cancels.map(l => l.blockNumber)
-        ]);
+            // 2. Fetch Transactions (Logs)
+            const currentBlock = await client.getBlockNumber();
+            const fromBlock = currentBlock - BigInt(10000) > BigInt(0) ? currentBlock - BigInt(10000) : BigInt(0); // Restrict range for RPC safety
 
-        const blockMap = new Map<string, number>();
-        await Promise.all(Array.from(blockNumbers).map(async (bn) => {
-            const block = await publicClient.getBlock({ blockNumber: bn });
-            blockMap.set(bn.toString(), Number(block.timestamp));
+            const [purchases, listings, cancels] = await Promise.all([
+              client.getLogs({ 
+                address: contractAddr, 
+                event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), 
+                args: { buyer: profileAddress as `0x${string}` }, 
+                fromBlock 
+              }),
+              client.getLogs({ 
+                address: contractAddr, 
+                event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price)'), 
+                args: { seller: profileAddress as `0x${string}` }, 
+                fromBlock 
+              }),
+              client.getLogs({ 
+                address: contractAddr, 
+                event: parseAbiItem('event ItemCanceled(uint256 indexed id, address indexed seller)'), 
+                args: { seller: profileAddress as `0x${string}` }, 
+                fromBlock 
+              })
+            ]);
+
+            // Calculate Reputation Stats
+            const mySales = await client.getLogs({
+                address: contractAddr, 
+                event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), 
+                fromBlock 
+            });
+            // Filter purchases where the item ID matches an item sold by this profile
+            const myItemIds = new Set(rawItems.filter((i:any) => i.seller.toLowerCase() === profileAddress.toLowerCase()).map((i:any) => i.id.toString()));
+            totalSales += mySales.filter(l => myItemIds.has(l.args.id?.toString() || "")).length;
+            totalCancels += cancels.length;
+
+            // Format Txs
+            const formatLog = (log: any, type: string) => ({
+              type,
+              hash: log.transactionHash,
+              block: log.blockNumber,
+              id: log.args.id?.toString(),
+              chainId: chain.id,
+              chainSymbol: chain.nativeCurrency.symbol
+            });
+
+            allTxs.push(...purchases.map(l => formatLog(l, 'PURCHASE')));
+            allTxs.push(...listings.map(l => formatLog(l, 'LISTING')));
+            allTxs.push(...cancels.map(l => formatLog(l, 'CANCEL')));
+
+          } catch (err) {
+            console.error(`Error fetching chain ${chain.id}:`, err);
+          }
         }));
 
-        const formatted = [
-          ...purchases.map(l => ({ type: 'PURCHASE', block: l.blockNumber, hash: l.transactionHash, id: l.args.id?.toString(), timestamp: blockMap.get(l.blockNumber.toString()) })),
-          ...listings.map(l => ({ type: 'LISTING', block: l.blockNumber, hash: l.transactionHash, id: l.args.id?.toString(), timestamp: blockMap.get(l.blockNumber.toString()) })),
-          ...deliveries.map(l => ({ type: 'DELIVERY', block: l.blockNumber, hash: l.transactionHash, id: l.args.id?.toString(), timestamp: blockMap.get(l.blockNumber.toString()) })),
-          ...cancels.map(l => ({ type: 'CANCEL', block: l.blockNumber, hash: l.transactionHash, id: l.args.id?.toString(), timestamp: blockMap.get(l.blockNumber.toString()) }))
-        ].sort((a, b) => Number(b.block - a.block)); // Sort Newest First
+        setInventory(allItems);
+        setTransactions(allTxs.sort((a, b) => Number(b.block - a.block)));
+        
+        // Update Reputation
+        let score = 50 + (totalSales * 5) - (totalCancels * 10);
+        setReputation(Math.min(Math.max(score, 0), 100));
 
-        setTransactions(formatted);
-      } catch (e) { 
-        console.error("Tx sync error", e); 
-      } finally { 
-        setLoadingTx(false); 
+      } finally {
+        setIsLoading(false);
       }
     };
-    fetchTx();
-  }, [activeTab, publicClient, profileAddress]);
 
-  // 3. INVENTORY & SETTINGS
-  const inventory = useMemo(() => {
-    if (!ownershipData || !allItems) return [];
-    return allItems.map((item, i) => {
-      const result = ownershipData[i]?.result as [boolean, string] | undefined;
-      if (result && result[0] === true) return { ...item, hasKey: !!(result[1] && result[1].length > 0), receivedKey: result[1] };
-      return null;
-    }).filter(Boolean);
-  }, [allItems, ownershipData]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem(`chronos_settings_${profileAddress}`);
-    if (saved) setSettings(JSON.parse(saved));
+    fetchAllChainData();
   }, [profileAddress]);
 
-  const updateSetting = (key: string, value: any) => {
-    const newSettings = { ...settings, [key]: value };
-    setSettings(newSettings);
-    localStorage.setItem(`chronos_settings_${profileAddress}`, JSON.stringify(newSettings));
-  };
-
-  const isInventoryHidden = settings.ghostMode && !isOwnProfile;
+  // Handlers
   const handleCopy = () => { navigator.clipboard.writeText(profileAddress); setCopied(true); setTimeout(() => setCopied(false), 2000); };
-  const handleDisconnect = () => { if(confirm("Disconnect?")) { disconnect(); router.push("/"); } };
-  const displayAvatar = settings.avatarUrl || ensAvatar;
-  
   const handleDecrypt = async (item: any) => {
     try {
       const blob = await fetchIPFS(item.ipfsCid);
@@ -292,18 +194,7 @@ export default function ProfilePage() {
     } catch (e: any) { alert(`Error: ${e.message}`); }
   };
 
-  const verifyTwitter = () => {
-    setVerifyingTwitter(true);
-    const code = Math.random().toString(36).substring(7).toUpperCase();
-    const text = encodeURIComponent(`Verifying my Web3 Identity on Chronos Market! \n\nSig: ${code} \nWallet: ${profileAddress} \n\n#Chronos #Web3`);
-    window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
-    setTimeout(() => {
-      const handle = prompt("Step 2: Enter your Twitter handle to complete verification (e.g. @elonmusk):");
-      if (handle) { updateSetting('twitterHandle', handle.replace('@', '')); alert("Verification Successful!"); }
-      setVerifyingTwitter(false);
-    }, 2000);
-  };
-
+  const displayAvatar = settings.avatarUrl || ensAvatar;
   const userLevel = Math.floor(Math.sqrt(inventory.length)) + 1;
 
   return (
@@ -313,152 +204,110 @@ export default function ProfilePage() {
 
       <main className="flex-grow w-full max-w-[1440px] mx-auto p-4 md:p-8 flex flex-col lg:flex-row gap-8 relative z-10">
         
-        {/* Sidebar */}
+        {/* PROFILE SIDEBAR */}
         <aside className="w-full lg:w-80 flex flex-col gap-6 shrink-0">
           <div className="rounded-xl border border-white/10 bg-[#0b1a24]/80 backdrop-blur-md p-6 flex flex-col items-center text-center relative overflow-hidden shadow-2xl">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-blue-500 to-primary"></div>
             
-            <div className={cn("relative mb-4 group", isOwnProfile && "cursor-pointer")} onClick={() => isOwnProfile && setIsAvatarModalOpen(true)}>
-              <div className="w-32 h-32 rounded-xl bg-cover bg-center ring-4 ring-white/5 shadow-[0_0_20px_rgba(0,229,255,0.3)] overflow-hidden flex items-center justify-center bg-black relative">
-                {displayAvatar ? <img src={displayAvatar} className="w-full h-full object-cover" /> : <User className="w-12 h-12 text-primary/50" />}
-                {isOwnProfile && <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Camera className="text-white"/></div>}
-              </div>
+            <div className="w-32 h-32 rounded-xl bg-black ring-4 ring-white/5 shadow-neon mb-4 overflow-hidden">
+               {displayAvatar ? <img src={displayAvatar} className="w-full h-full object-cover" /> : <User className="w-full h-full p-8 text-primary/50" />}
             </div>
 
-            <h1 className="text-2xl font-bold text-white mb-1 tracking-tight truncate w-full">{settings.displayName || ensName || "Time Traveler"}</h1>
-            <p className="text-primary text-sm font-medium mb-2">Level {userLevel} User</p>
+            <h1 className="text-2xl font-bold text-white mb-1 tracking-tight truncate w-full">{settings.displayName || "Time Traveler"}</h1>
+            <p className="text-primary text-sm font-medium mb-4">Level {userLevel} User</p>
 
-            {/* Reputation */}
-            <div className="w-full bg-black/20 rounded-lg p-2 mb-4 border border-white/5">
-                <div className="flex justify-between items-center text-xs mb-1">
-                    <span className="text-gray-400 font-mono uppercase flex items-center gap-1"><Shield size={10}/> Trust Score</span>
-                    <span className={cn("font-bold font-mono", reputation > 70 ? "text-green-400" : reputation > 40 ? "text-yellow-400" : "text-red-400")}>{reputation}/100</span>
-                </div>
-                <div className="h-1.5 w-full bg-black rounded-full overflow-hidden border border-white/5">
-                    <div className={cn("h-full shadow-[0_0_8px_currentColor]", reputation > 70 ? "bg-green-500" : reputation > 40 ? "bg-yellow-500" : "bg-red-500")} style={{ width: `${reputation}%` }}></div>
-                </div>
-            </div>
-
-            <div className="w-full bg-black/40 rounded-lg p-3 mb-4 border border-white/5 text-left hover:border-primary/30 transition-colors">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Wallet Address</p>
-              <button onClick={handleCopy} className="flex justify-between items-center w-full group/copy">
+            <div className="w-full bg-black/40 rounded-lg p-3 mb-4 border border-white/5 hover:border-primary/30 transition-colors">
+              <button onClick={handleCopy} className="flex justify-between items-center w-full group">
                 <code className="text-blue-400 text-xs font-mono truncate mr-2">{profileAddress.slice(0, 10)}...{profileAddress.slice(-8)}</code>
-                {copied ? <CheckCircle2 size={14} className="text-green-500"/> : <Copy size={14} className="text-gray-500 group-hover/copy:text-white transition-colors"/>}
+                {copied ? <CheckCircle2 size={14} className="text-green-500"/> : <Copy size={14} className="text-gray-500 group-hover:text-white"/>}
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 w-full mb-6 mt-4">
+            {/* Aggregated Stats */}
+            <div className="grid grid-cols-2 gap-3 w-full mb-6">
               <div className="bg-[#0f172a]/50 p-3 rounded-lg border border-white/5">
-                <p className="text-[10px] text-gray-400 uppercase mb-1">Balance</p>
-                <p className="text-white font-bold font-mono text-sm truncate">
-                  {balanceData ? parseFloat(formatEther(balanceData.value)).toFixed(3) : "0.00"} MOCK
-                </p>
+                <p className="text-[10px] text-gray-400 uppercase mb-1">Reputation</p>
+                <p className={cn("font-bold font-mono text-sm", reputation > 70 ? "text-green-400" : "text-yellow-400")}>{reputation}/100</p>
               </div>
               <div className="bg-[#0f172a]/50 p-3 rounded-lg border border-white/5">
-                <p className="text-[10px] text-gray-400 uppercase mb-1">Files</p>
+                <p className="text-[10px] text-gray-400 uppercase mb-1">Artifacts</p>
                 <p className="text-white font-bold font-mono text-sm">{inventory.length}</p>
               </div>
             </div>
 
-            {isOwnProfile && <button onClick={handleDisconnect} className="w-full py-3 px-4 bg-black/40 hover:bg-red-900/20 border border-white/10 hover:border-red-500/50 text-gray-400 hover:text-red-400 rounded-lg transition-all text-xs font-mono flex items-center justify-center gap-2 group uppercase tracking-widest"><Power size={16} className="group-hover:text-red-500 transition-colors"/> Disconnect</button>}
+            {isOwnProfile && <button onClick={() => { if(confirm("Disconnect?")) { disconnect(); router.push("/"); } }} className="w-full py-3 px-4 bg-black/40 hover:bg-red-900/20 border border-white/10 hover:border-red-500/50 text-gray-400 hover:text-red-400 rounded-lg transition-all text-xs font-mono flex items-center justify-center gap-2 group uppercase tracking-widest"><Power size={16}/> Disconnect</button>}
           </div>
         </aside>
 
+        {/* MAIN CONTENT AREA */}
         <div className="flex-1 flex flex-col gap-6 min-w-0">
+           
+           {/* Tabs */}
            <div className="flex overflow-x-auto pb-2 scrollbar-hide gap-1 border-b border-white/10">
             {['INVENTORY', 'TRANSACTIONS', 'SETTINGS'].map((tab) => (
               <button key={tab} onClick={() => setActiveTab(tab as any)} className={cn("px-6 py-3 rounded-t-lg font-bold text-xs tracking-wide transition-all border-t border-x", activeTab === tab ? "bg-primary text-black border-primary shadow-[0_-4px_20px_-5px_rgba(0,229,255,0.3)] relative z-10" : "bg-[#0f172a] text-gray-400 hover:text-white border-white/5 hover:bg-white/5")}>{tab}</button>
             ))}
           </div>
            
+           {/* Inventory Tab */}
            {activeTab === 'INVENTORY' && (
-             isInventoryHidden ? (
-               <div className="flex flex-col items-center justify-center py-32 border-2 border-dashed border-white/10 rounded-xl bg-white/5 text-gray-500 animate-in fade-in">
-                 <div className="p-4 bg-white/5 rounded-full mb-4 border border-white/10"><EyeOff size={32} className="text-gray-400"/></div>
-                 <h3 className="text-lg font-bold text-white mb-1">Inventory Hidden</h3>
-                 <p className="text-xs font-mono opacity-60">This user has enabled Ghost Mode.</p>
-               </div>
-             ) : (
-               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                 {inventory.map((item, i) => (
-                    <InventoryItem key={i} item={item} onDecrypt={handleDecrypt} />
-                 ))}
-                 {inventory.length === 0 && <div className="col-span-full text-center py-20 text-gray-500">No items found in public inventory.</div>}
-               </div>
-             )
+             <ProfileInventory items={inventory} isLoading={isLoading} onDecrypt={handleDecrypt} />
            )}
            
+           {/* Transactions Tab */}
            {activeTab === 'TRANSACTIONS' && (
             <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {loadingTx ? (
+              {isLoading ? (
                 <div className="py-20 text-center"><RefreshCw className="animate-spin mx-auto text-primary"/></div>
               ) : transactions.length > 0 ? (
                 transactions.map((tx, i) => (
-                  <a key={i} href={`https://testnet.dhscan.io/tx/${tx.hash}`} target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 rounded-lg bg-[#0b1a24]/60 border border-white/5 hover:border-primary/30 hover:bg-white/5 transition-all group">
+                  <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-[#0b1a24]/60 border border-white/5 hover:border-primary/30 hover:bg-white/5 transition-all group">
                     <div className="flex items-center gap-4">
                       <div className={cn("p-2 rounded border", 
                         tx.type === 'PURCHASE' ? "bg-green-500/10 text-green-500 border-green-500/20" : 
                         tx.type === 'LISTING' ? "bg-blue-500/10 text-blue-500 border-blue-500/20" : 
-                        tx.type === 'CANCEL' ? "bg-red-500/10 text-red-500 border-red-500/20" :
-                        "bg-yellow-500/10 text-yellow-500 border-yellow-500/20"
+                        "bg-red-500/10 text-red-500 border-red-500/20"
                       )}>
-                        {tx.type === 'PURCHASE' ? <ArrowDownLeft size={18}/> : tx.type === 'LISTING' ? <ArrowUpRight size={18}/> : tx.type === 'CANCEL' ? <Ban size={18}/> : <Code size={18}/>}
+                        {tx.type === 'PURCHASE' ? <ArrowDownLeft size={18}/> : tx.type === 'LISTING' ? <ArrowUpRight size={18}/> : <Ban size={18}/>}
                       </div>
                       <div>
                         <h4 className="text-white font-bold text-sm flex items-center gap-2">
-                          {tx.type} • Item #{tx.id}
-                          <span className="text-[10px] font-normal text-gray-500 bg-white/5 px-2 py-0.5 rounded">{formatTimeAgo(tx.timestamp)}</span>
+                          {tx.type} <span className="text-[10px] text-gray-500">#{tx.id}</span>
+                          {/* Chain Badge */}
+                          <span className={cn("text-[9px] px-1.5 py-0.5 rounded border", tx.chainId === 55931 ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" : "bg-blue-600/20 text-blue-400 border-blue-600/30")}>
+                            {tx.chainId === 55931 ? "DH" : "ARC"}
+                          </span>
                         </h4>
-                        <p className="text-[10px] text-gray-500 font-mono">{tx.hash.slice(0,10)}...</p>
+                        <p className="text-[10px] text-gray-500 font-mono">{tx.hash.slice(0,12)}...</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-400 group-hover:text-primary">
-                      <span className="hidden sm:inline">View Explorer</span> <ArrowUpRight size={14}/>
-                    </div>
-                  </a>
+                    <a href={tx.chainId === 55931 ? `https://testnet.dhscan.io/tx/${tx.hash}` : `https://testnet.arcscan.app/tx/${tx.hash}`} target="_blank" className="flex items-center gap-2 text-xs text-gray-400 group-hover:text-primary">
+                      Explorer <ArrowUpRight size={14}/>
+                    </a>
+                  </div>
                 ))
               ) : (
                 <div className="text-center py-20 text-gray-500 font-mono text-xs uppercase bg-black/20 rounded-xl border border-white/5 border-dashed">
-                  No transaction history found on-chain.
+                  No transaction history found on any chain.
                 </div>
               )}
             </div>
            )}
 
+           {/* Settings Tab (Same as before) */}
            {activeTab === 'SETTINGS' && (
-            <div className="rounded-xl border border-white/10 bg-[#0b1a24]/80 p-6 animate-in fade-in space-y-8">
-              <div className="space-y-4">
-                <h3 className="text-white font-bold uppercase tracking-wider text-sm flex items-center gap-2 border-b border-white/5 pb-2"><User size={16} className="text-primary"/> Profile Identity</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2"><label className="text-[10px] font-mono text-gray-400 uppercase">Display Name</label><input className="w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-primary outline-none" placeholder="Username" value={settings.displayName} onChange={(e) => updateSetting('displayName', e.target.value)} /></div>
-                  <div className="space-y-2"><label className="text-[10px] font-mono text-gray-400 uppercase">Avatar URL</label><input className="w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-primary outline-none" placeholder="https://..." value={settings.avatarUrl} onChange={(e) => updateSetting('avatarUrl', e.target.value)} /></div>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <h3 className="text-white font-bold uppercase tracking-wider text-sm flex items-center gap-2 border-b border-white/5 pb-2"><Settings size={16} className="text-primary"/> System Preferences</h3>
-                <div className="flex items-center justify-between group p-3 rounded-lg hover:bg-white/5 transition-colors cursor-pointer" onClick={() => updateSetting('ghostMode', !settings.ghostMode)}>
-                    <div className="flex flex-col"><span className="text-gray-300 text-sm font-medium">Ghost Mode</span><span className="text-[10px] text-gray-500">Hide inventory from public view</span></div>
-                    <div className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors", settings.ghostMode ? "bg-primary/20" : "bg-gray-700")}><span className={cn("inline-block h-4 w-4 transform rounded-full transition-transform", settings.ghostMode ? "translate-x-6 bg-primary shadow-[0_0_10px_#00E5FF]" : "translate-x-1 bg-gray-400")}></span></div>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <h3 className="text-white font-bold uppercase tracking-wider text-sm flex items-center gap-2 border-b border-white/5 pb-2"><LinkIcon size={16} className="text-primary"/> Social</h3>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
-                  <div className="flex items-center gap-3"><div className="p-2 bg-blue-500/20 text-blue-400 rounded"><Twitter size={18}/></div><div><p className="text-sm font-bold text-white">Twitter / X</p><p className="text-[10px] text-gray-400">{settings.twitterHandle ? `@${settings.twitterHandle}` : "Not Linked"}</p></div></div>
-                  {settings.twitterHandle ? (
-                    <button onClick={() => updateSetting('twitterHandle', "")} className="text-xs text-red-400 hover:underline">Unlink</button>
-                  ) : (
-                    <button onClick={verifyTwitter} disabled={verifyingTwitter} className="px-3 py-1 bg-primary/10 text-primary text-xs font-bold rounded border border-primary/20 hover:bg-primary/20 flex items-center gap-2">
-                      {verifyingTwitter ? <RefreshCw className="animate-spin" size={12}/> : null} {verifyingTwitter ? "VERIFYING..." : "LINK ACCOUNT"}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+             <div className="rounded-xl border border-white/10 bg-[#0b1a24]/80 p-6 animate-in fade-in space-y-8">
+               <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                 <h3 className="text-white font-bold mb-2">Local Settings</h3>
+                 <div className="flex items-center justify-between">
+                   <span className="text-sm text-gray-400">Display Name</span>
+                   <input className="bg-black/50 border border-white/10 rounded px-2 py-1 text-sm text-white" value={settings.displayName} onChange={e => setSettings({...settings, displayName: e.target.value})} />
+                 </div>
+               </div>
+             </div>
            )}
         </div>
       </main>
-      <AvatarModal isOpen={isAvatarModalOpen} onClose={() => setIsAvatarModalOpen(false)} onSelect={(url) => updateSetting('avatarUrl', url)} />
     </div>
   );
 }

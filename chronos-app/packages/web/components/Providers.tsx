@@ -10,9 +10,10 @@ import { type Chain } from "viem";
 const datahaven = {
   id: 55931,
   name: 'DataHaven Testnet',
-  nativeCurrency: { name: 'DataHaven Token', symbol: 'DH', decimals: 18 },
+  nativeCurrency: { name: 'MOCK Token', symbol: 'MOCK', decimals: 18 },
   rpcUrls: {
     default: { http: ['https://services.datahaven-testnet.network/testnet'] },
+    public: { http: ['https://services.datahaven-testnet.network/testnet'] },
   },
   blockExplorers: {
     default: { name: 'DHScan', url: 'https://testnet.dhscan.io/' },
@@ -20,12 +21,28 @@ const datahaven = {
   testnet: true,
 } as const satisfies Chain;
 
-// 2. Configure Wagmi
+// 2. Define Arc Testnet Chain
+const arcTestnet = {
+  id: 5042002,
+  name: 'Arc Testnet',
+  nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://rpc.testnet.arc.network'] },
+    public: { http: ['https://rpc.testnet.arc.network'] },
+  },
+  blockExplorers: {
+    default: { name: 'ArcScan', url: 'https://testnet.arcscan.app' },
+  },
+  testnet: true,
+} as const satisfies Chain;
+
+// 3. Configure Wagmi with BOTH Chains
 export const config = createConfig({
-  chains: [datahaven],
+  chains: [datahaven, arcTestnet], // Add both chains here
   connectors: [metaMask()],
   transports: {
     [datahaven.id]: http(),
+    [arcTestnet.id]: http(),
   },
   ssr: true,
 });
