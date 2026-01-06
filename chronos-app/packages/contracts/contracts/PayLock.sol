@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-contract PayLock {
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+contract PayLock is Ownable, ReentrancyGuard {
+    
     struct Item {
         uint256 id;
         address payable seller;
@@ -13,100 +17,152 @@ contract PayLock {
         uint256 maxSupply;
         uint256 soldCount;
         bool isSoldOut;
+        bool isActive;
     }
 
-    // Mappings
-    mapping(uint256 => Item) public items;
-    // Map Item ID -> Buyer Address -> Encrypted Key
-    mapping(uint256 => mapping(address => string)) public buyerKeys;
-    // Map Item ID -> Buyer Address -> specific purchase status
-    mapping(uint256 => mapping(address => bool)) public hasBought;
+    struct Purchase {
+        bool isPurchased;
+        string encryptedKey;
+        bool isDelivered;
+    }
 
+    // State Variables
     uint256 public itemCount;
+    uint256 public serviceFeePercentage = 5; // Default 5%
+    uint256 public accumulatedFees; // Track fees available for withdrawal
+
+    mapping(uint256 => Item) public items;
+    // Mapping: ItemID => BuyerAddress => PurchaseDetails
+    mapping(uint256 => mapping(address => Purchase)) public purchases;
 
     // Events
     event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply);
     event ItemPurchased(uint256 indexed id, address indexed buyer);
     event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey);
     event ItemCanceled(uint256 indexed id, address indexed seller);
+    event FeeUpdated(uint256 newFee);
+    event FeesWithdrawn(address indexed owner, uint256 amount);
+
+    constructor() Ownable(msg.sender) {}
+
+    // --- MARKETPLACE ACTIONS ---
 
     function listItem(
-        string memory _name,
-        string memory _ipfsCid,
+        string memory _name, 
+        string memory _ipfsCid, 
         string memory _previewCid,
         string memory _fileType,
-        uint256 _price,
+        uint256 _price, 
         uint256 _maxSupply
-    ) public {
+    ) external nonReentrant {
         require(_maxSupply > 0, "Supply must be > 0");
 
         itemCount++;
-        items[itemCount] = Item(
-            itemCount,
-            payable(msg.sender),
-            _name,
-            _ipfsCid,
-            _previewCid,
-            _fileType,
-            _price,
-            _maxSupply,
-            0,
-            false
-        );
+        items[itemCount] = Item({
+            id: itemCount,
+            seller: payable(msg.sender),
+            name: _name,
+            ipfsCid: _ipfsCid,
+            previewCid: _previewCid,
+            fileType: _fileType,
+            price: _price,
+            maxSupply: _maxSupply,
+            soldCount: 0,
+            isSoldOut: false,
+            isActive: true
+        });
 
         emit ItemListed(itemCount, msg.sender, _price, _name, _maxSupply);
     }
 
-    function buyItem(uint256 _id) public payable {
+    function buyItem(uint256 _id) external payable nonReentrant {
         Item storage item = items[_id];
-        require(_id > 0 && _id <= itemCount, "Item does not exist");
-        require(msg.value >= item.price, "Not enough ether");
+        require(item.isActive, "Item is not active");
         require(!item.isSoldOut, "Item is sold out");
-        require(item.soldCount < item.maxSupply, "Max supply reached");
-        require(!hasBought[_id][msg.sender], "You already bought this");
+        require(msg.value >= item.price, "Insufficient funds sent");
+        require(!purchases[_id][msg.sender].isPurchased, "Already purchased");
 
-        // 1. UPDATE STATE (Effects)
-        // We update the contract state BEFORE sending money to prevent reentrancy attacks
-        hasBought[_id][msg.sender] = true;
+        // ESCROW LOGIC: Funds are held in the contract automatically 
+        // We do NOT transfer to seller here.
+
+        // Update Item State
         item.soldCount++;
-
-        // Auto-mark sold out if supply reached
         if (item.soldCount >= item.maxSupply) {
             item.isSoldOut = true;
         }
 
-        // 2. SEND MONEY (Interactions)
-        // Using .call is the modern, secure way to transfer Ether
-        (bool success, ) = item.seller.call{value: msg.value}("");
-        require(success, "Transfer to seller failed");
+        // Update Purchase State
+        purchases[_id][msg.sender] = Purchase({
+            isPurchased: true,
+            encryptedKey: "",
+            isDelivered: false
+        });
 
         emit ItemPurchased(_id, msg.sender);
     }
 
-    function deliverKey(uint256 _id, address _buyer, string memory _keyForBuyer) public {
+    /**
+     * @dev Seller releases the key. Contract calculates fee, keeps it, and sends remainder to seller.
+     */
+    function deliverKey(uint256 _id, address _buyer, string memory _keyForBuyer) external nonReentrant {
         Item storage item = items[_id];
-        require(msg.sender == item.seller, "Only seller can deliver");
-        require(hasBought[_id][_buyer], "Address did not buy this item");
+        Purchase storage purchase = purchases[_id][_buyer];
 
-        buyerKeys[_id][_buyer] = _keyForBuyer;
-        
+        require(msg.sender == item.seller, "Only seller can deliver key");
+        require(purchase.isPurchased, "Buyer has not purchased");
+        require(!purchase.isDelivered, "Key already delivered");
+
+        // 1. Update State
+        purchase.encryptedKey = _keyForBuyer;
+        purchase.isDelivered = true;
+
+        // 2. Calculate Fee & Payout
+        uint256 feeAmount = (item.price * serviceFeePercentage) / 100;
+        uint256 sellerAmount = item.price - feeAmount;
+
+        // 3. Update Fee Balance
+        accumulatedFees += feeAmount;
+
+        // 4. Transfer Payout to Seller
+        (bool success, ) = item.seller.call{value: sellerAmount}("");
+        require(success, "Transfer to seller failed");
+
         emit KeyDelivered(_id, _buyer, _keyForBuyer);
     }
 
-    function cancelListing(uint256 _id) public {
+    function cancelListing(uint256 _id) external {
         Item storage item = items[_id];
         require(msg.sender == item.seller, "Only seller can cancel");
-        require(!item.isSoldOut, "Already sold out");
+        require(item.soldCount == 0, "Cannot cancel items with active sales");
         
-        // Mark as sold out effectively cancels it
+        item.isActive = false;
         item.isSoldOut = true;
-        // Cap the supply at whatever was sold so far
-        item.maxSupply = item.soldCount;
-
         emit ItemCanceled(_id, msg.sender);
     }
 
-    function getMarketplaceItems() public view returns (Item[] memory) {
+    // --- OWNER FUNCTIONS ---
+
+    function setFee(uint256 _newFee) external onlyOwner {
+        require(_newFee <= 20, "Fee cannot exceed 20%");
+        serviceFeePercentage = _newFee;
+        emit FeeUpdated(_newFee);
+    }
+
+    function withdrawFees() external onlyOwner {
+        uint256 balance = accumulatedFees;
+        require(balance > 0, "No fees to withdraw");
+
+        accumulatedFees = 0;
+        (bool success, ) = payable(owner()).call{value: balance}("");
+        require(success, "Withdraw failed");
+
+        emit FeesWithdrawn(owner(), balance);
+    }
+
+    // --- VIEW FUNCTIONS ---
+
+    function getMarketplaceItems() external view returns (Item[] memory) {
+        // Returns all items (filtering done on frontend for efficiency)
         Item[] memory allItems = new Item[](itemCount);
         for (uint256 i = 1; i <= itemCount; i++) {
             allItems[i - 1] = items[i];
@@ -114,7 +170,8 @@ contract PayLock {
         return allItems;
     }
 
-    function checkOwnership(uint256 _id, address _user) public view returns (bool bought, string memory key) {
-        return (hasBought[_id][_user], buyerKeys[_id][_user]);
+    function checkOwnership(uint256 _id, address _user) external view returns (bool bought, string memory key) {
+        Purchase memory p = purchases[_id][_user];
+        return (p.isPurchased, p.encryptedKey);
     }
 }

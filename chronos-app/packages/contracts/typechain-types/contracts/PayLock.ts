@@ -35,6 +35,7 @@ export declare namespace PayLock {
     maxSupply: BigNumberish;
     soldCount: BigNumberish;
     isSoldOut: boolean;
+    isActive: boolean;
   };
 
   export type ItemStructOutput = [
@@ -47,7 +48,8 @@ export declare namespace PayLock {
     price: bigint,
     maxSupply: bigint,
     soldCount: bigint,
-    isSoldOut: boolean
+    isSoldOut: boolean,
+    isActive: boolean
   ] & {
     id: bigint;
     seller: string;
@@ -59,39 +61,49 @@ export declare namespace PayLock {
     maxSupply: bigint;
     soldCount: bigint;
     isSoldOut: boolean;
+    isActive: boolean;
   };
 }
 
 export interface PayLockInterface extends Interface {
   getFunction(
     nameOrSignature:
+      | "accumulatedFees"
       | "buyItem"
-      | "buyerKeys"
       | "cancelListing"
       | "checkOwnership"
       | "deliverKey"
       | "getMarketplaceItems"
-      | "hasBought"
       | "itemCount"
       | "items"
       | "listItem"
+      | "owner"
+      | "purchases"
+      | "renounceOwnership"
+      | "serviceFeePercentage"
+      | "setFee"
+      | "transferOwnership"
+      | "withdrawFees"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
+      | "FeeUpdated"
+      | "FeesWithdrawn"
       | "ItemCanceled"
       | "ItemListed"
       | "ItemPurchased"
       | "KeyDelivered"
+      | "OwnershipTransferred"
   ): EventFragment;
 
   encodeFunctionData(
-    functionFragment: "buyItem",
-    values: [BigNumberish]
+    functionFragment: "accumulatedFees",
+    values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "buyerKeys",
-    values: [BigNumberish, AddressLike]
+    functionFragment: "buyItem",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "cancelListing",
@@ -109,19 +121,43 @@ export interface PayLockInterface extends Interface {
     functionFragment: "getMarketplaceItems",
     values?: undefined
   ): string;
-  encodeFunctionData(
-    functionFragment: "hasBought",
-    values: [BigNumberish, AddressLike]
-  ): string;
   encodeFunctionData(functionFragment: "itemCount", values?: undefined): string;
   encodeFunctionData(functionFragment: "items", values: [BigNumberish]): string;
   encodeFunctionData(
     functionFragment: "listItem",
     values: [string, string, string, string, BigNumberish, BigNumberish]
   ): string;
+  encodeFunctionData(functionFragment: "owner", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "purchases",
+    values: [BigNumberish, AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "renounceOwnership",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "serviceFeePercentage",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "setFee",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "transferOwnership",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "withdrawFees",
+    values?: undefined
+  ): string;
 
+  decodeFunctionResult(
+    functionFragment: "accumulatedFees",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "buyItem", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "buyerKeys", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "cancelListing",
     data: BytesLike
@@ -135,10 +171,53 @@ export interface PayLockInterface extends Interface {
     functionFragment: "getMarketplaceItems",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "hasBought", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "itemCount", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "items", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "listItem", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "purchases", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "renounceOwnership",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "serviceFeePercentage",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "setFee", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "transferOwnership",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "withdrawFees",
+    data: BytesLike
+  ): Result;
+}
+
+export namespace FeeUpdatedEvent {
+  export type InputTuple = [newFee: BigNumberish];
+  export type OutputTuple = [newFee: bigint];
+  export interface OutputObject {
+    newFee: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace FeesWithdrawnEvent {
+  export type InputTuple = [owner: AddressLike, amount: BigNumberish];
+  export type OutputTuple = [owner: string, amount: bigint];
+  export interface OutputObject {
+    owner: string;
+    amount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace ItemCanceledEvent {
@@ -213,6 +292,19 @@ export namespace KeyDeliveredEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace OwnershipTransferredEvent {
+  export type InputTuple = [previousOwner: AddressLike, newOwner: AddressLike];
+  export type OutputTuple = [previousOwner: string, newOwner: string];
+  export interface OutputObject {
+    previousOwner: string;
+    newOwner: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export interface PayLock extends BaseContract {
   connect(runner?: ContractRunner | null): PayLock;
   waitForDeployment(): Promise<this>;
@@ -256,13 +348,9 @@ export interface PayLock extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
-  buyItem: TypedContractMethod<[_id: BigNumberish], [void], "payable">;
+  accumulatedFees: TypedContractMethod<[], [bigint], "view">;
 
-  buyerKeys: TypedContractMethod<
-    [arg0: BigNumberish, arg1: AddressLike],
-    [string],
-    "view"
-  >;
+  buyItem: TypedContractMethod<[_id: BigNumberish], [void], "payable">;
 
   cancelListing: TypedContractMethod<[_id: BigNumberish], [void], "nonpayable">;
 
@@ -284,12 +372,6 @@ export interface PayLock extends BaseContract {
     "view"
   >;
 
-  hasBought: TypedContractMethod<
-    [arg0: BigNumberish, arg1: AddressLike],
-    [boolean],
-    "view"
-  >;
-
   itemCount: TypedContractMethod<[], [bigint], "view">;
 
   items: TypedContractMethod<
@@ -305,6 +387,7 @@ export interface PayLock extends BaseContract {
         bigint,
         bigint,
         bigint,
+        boolean,
         boolean
       ] & {
         id: bigint;
@@ -317,6 +400,7 @@ export interface PayLock extends BaseContract {
         maxSupply: bigint;
         soldCount: bigint;
         isSoldOut: boolean;
+        isActive: boolean;
       }
     ],
     "view"
@@ -335,20 +419,44 @@ export interface PayLock extends BaseContract {
     "nonpayable"
   >;
 
+  owner: TypedContractMethod<[], [string], "view">;
+
+  purchases: TypedContractMethod<
+    [arg0: BigNumberish, arg1: AddressLike],
+    [
+      [boolean, string, boolean] & {
+        isPurchased: boolean;
+        encryptedKey: string;
+        isDelivered: boolean;
+      }
+    ],
+    "view"
+  >;
+
+  renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
+
+  serviceFeePercentage: TypedContractMethod<[], [bigint], "view">;
+
+  setFee: TypedContractMethod<[_newFee: BigNumberish], [void], "nonpayable">;
+
+  transferOwnership: TypedContractMethod<
+    [newOwner: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  withdrawFees: TypedContractMethod<[], [void], "nonpayable">;
+
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
 
   getFunction(
+    nameOrSignature: "accumulatedFees"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "buyItem"
   ): TypedContractMethod<[_id: BigNumberish], [void], "payable">;
-  getFunction(
-    nameOrSignature: "buyerKeys"
-  ): TypedContractMethod<
-    [arg0: BigNumberish, arg1: AddressLike],
-    [string],
-    "view"
-  >;
   getFunction(
     nameOrSignature: "cancelListing"
   ): TypedContractMethod<[_id: BigNumberish], [void], "nonpayable">;
@@ -370,13 +478,6 @@ export interface PayLock extends BaseContract {
     nameOrSignature: "getMarketplaceItems"
   ): TypedContractMethod<[], [PayLock.ItemStructOutput[]], "view">;
   getFunction(
-    nameOrSignature: "hasBought"
-  ): TypedContractMethod<
-    [arg0: BigNumberish, arg1: AddressLike],
-    [boolean],
-    "view"
-  >;
-  getFunction(
     nameOrSignature: "itemCount"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
@@ -394,6 +495,7 @@ export interface PayLock extends BaseContract {
         bigint,
         bigint,
         bigint,
+        boolean,
         boolean
       ] & {
         id: bigint;
@@ -406,6 +508,7 @@ export interface PayLock extends BaseContract {
         maxSupply: bigint;
         soldCount: bigint;
         isSoldOut: boolean;
+        isActive: boolean;
       }
     ],
     "view"
@@ -424,7 +527,52 @@ export interface PayLock extends BaseContract {
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "owner"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "purchases"
+  ): TypedContractMethod<
+    [arg0: BigNumberish, arg1: AddressLike],
+    [
+      [boolean, string, boolean] & {
+        isPurchased: boolean;
+        encryptedKey: string;
+        isDelivered: boolean;
+      }
+    ],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "renounceOwnership"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "serviceFeePercentage"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "setFee"
+  ): TypedContractMethod<[_newFee: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "transferOwnership"
+  ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "withdrawFees"
+  ): TypedContractMethod<[], [void], "nonpayable">;
 
+  getEvent(
+    key: "FeeUpdated"
+  ): TypedContractEvent<
+    FeeUpdatedEvent.InputTuple,
+    FeeUpdatedEvent.OutputTuple,
+    FeeUpdatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "FeesWithdrawn"
+  ): TypedContractEvent<
+    FeesWithdrawnEvent.InputTuple,
+    FeesWithdrawnEvent.OutputTuple,
+    FeesWithdrawnEvent.OutputObject
+  >;
   getEvent(
     key: "ItemCanceled"
   ): TypedContractEvent<
@@ -453,8 +601,37 @@ export interface PayLock extends BaseContract {
     KeyDeliveredEvent.OutputTuple,
     KeyDeliveredEvent.OutputObject
   >;
+  getEvent(
+    key: "OwnershipTransferred"
+  ): TypedContractEvent<
+    OwnershipTransferredEvent.InputTuple,
+    OwnershipTransferredEvent.OutputTuple,
+    OwnershipTransferredEvent.OutputObject
+  >;
 
   filters: {
+    "FeeUpdated(uint256)": TypedContractEvent<
+      FeeUpdatedEvent.InputTuple,
+      FeeUpdatedEvent.OutputTuple,
+      FeeUpdatedEvent.OutputObject
+    >;
+    FeeUpdated: TypedContractEvent<
+      FeeUpdatedEvent.InputTuple,
+      FeeUpdatedEvent.OutputTuple,
+      FeeUpdatedEvent.OutputObject
+    >;
+
+    "FeesWithdrawn(address,uint256)": TypedContractEvent<
+      FeesWithdrawnEvent.InputTuple,
+      FeesWithdrawnEvent.OutputTuple,
+      FeesWithdrawnEvent.OutputObject
+    >;
+    FeesWithdrawn: TypedContractEvent<
+      FeesWithdrawnEvent.InputTuple,
+      FeesWithdrawnEvent.OutputTuple,
+      FeesWithdrawnEvent.OutputObject
+    >;
+
     "ItemCanceled(uint256,address)": TypedContractEvent<
       ItemCanceledEvent.InputTuple,
       ItemCanceledEvent.OutputTuple,
@@ -497,6 +674,17 @@ export interface PayLock extends BaseContract {
       KeyDeliveredEvent.InputTuple,
       KeyDeliveredEvent.OutputTuple,
       KeyDeliveredEvent.OutputObject
+    >;
+
+    "OwnershipTransferred(address,address)": TypedContractEvent<
+      OwnershipTransferredEvent.InputTuple,
+      OwnershipTransferredEvent.OutputTuple,
+      OwnershipTransferredEvent.OutputObject
+    >;
+    OwnershipTransferred: TypedContractEvent<
+      OwnershipTransferredEvent.InputTuple,
+      OwnershipTransferredEvent.OutputTuple,
+      OwnershipTransferredEvent.OutputObject
     >;
   };
 }

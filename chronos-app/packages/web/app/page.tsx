@@ -2,21 +2,22 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useAccount, useWriteContract, useSwitchChain } from "wagmi";
-import { formatEther, createPublicClient, http } from "viem";
+import { formatEther, createPublicClient, http, parseAbiItem } from "viem"; // FIX: Added parseAbiItem
 import Link from "next/link";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts"; 
 import { datahaven, arcTestnet } from "@/lib/chains"; 
-import { Footer } from "../components/Footer";
 import { Navigation } from "../components/Navigation";
-import { fetchIPFS } from "@/lib/ipfs"; 
+import { Footer } from "../components/Footer";
+import { fetchIPFS, getIPFSUrl } from "@/lib/ipfs"; 
 import { getCryptoPrices } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+// FIX: Added ChevronUp
 import { 
-  Search, Music, Video, FileText, Play, Archive, ChevronDown, 
-  ChevronUp, User, Info, Pause, RefreshCw, Share2, Check, Globe, AlertTriangle
+  Search, Video, FileText, Play, Archive, ChevronDown, ChevronUp,
+  User, Info, Pause, RefreshCw, Share2, Check, Globe, AlertTriangle
 } from "lucide-react";
 
-// --- SPLASH SCREEN (Unchanged) ---
+// --- SPLASH SCREEN ---
 function SplashScreen({ onEnter }: { onEnter: () => void }) {
   const [progress, setProgress] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -62,23 +63,24 @@ function MarketplaceCard({ item }: { item: any }) {
     const loadMetadata = async () => {
       if (!item.previewCid) return;
       try {
-        const cid = item.previewCid.replace("ipfs://", "");
-        const blob = await fetchIPFS(cid);
-        if (blob.type.includes("json")) {
-          const text = await blob.text();
-          const json = JSON.parse(text);
-          setMeta({
-            ...json,
-            image: json.image ? `https://gateway.pinata.cloud/ipfs/${json.image.replace("ipfs://", "")}` : null,
-            animation_url: json.animation_url ? `https://gateway.pinata.cloud/ipfs/${json.animation_url.replace("ipfs://", "")}` : null
-          });
-        } else {
-          const url = URL.createObjectURL(blob);
-          setMeta({ image: url });
-        }
-      } catch (e) { 
-        setMeta({ image: `https://gateway.pinata.cloud/ipfs/${item.previewCid.replace("ipfs://", "")}` }); 
-      }
+        const url = getIPFSUrl(item.previewCid);
+        if (!url) return;
+
+        try {
+          const res = await fetch(url);
+          const contentType = res.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const json = await res.json();
+            setMeta({
+              ...json,
+              image: getIPFSUrl(json.image),
+              animation_url: getIPFSUrl(json.animation_url)
+            });
+            return;
+          }
+        } catch {}
+        setMeta({ image: url });
+      } catch (e) { console.error("Metadata load error", e); }
     };
     loadMetadata();
   }, [item.previewCid]);
@@ -141,7 +143,7 @@ function MarketplaceCard({ item }: { item: any }) {
         <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold border shadow-sm backdrop-blur-md", item.chainId === 55931 ? "bg-cyan-900/80 text-cyan-400 border-cyan-500/30" : "bg-blue-900/80 text-blue-400 border-blue-500/30")}>
           <Globe size={10}/> {item.chainId === 55931 ? "DH" : "ARC"}
         </span>
-        <span className="inline-flex items-center rounded-full bg-black/80 backdrop-blur-md px-2.5 py-1 text-[10px] font-bold text-primary border border-primary/30 shadow-sm">{type}</span>
+        <span className="inline-flex items-center rounded-full bg-black/80 backdrop-blur-md px-2.5 py-1 text-[10px] font-bold text-primary border border-primary/30 shadow-sm">{type.replace('.', '')}</span>
       </div>
       
       <div className={cn("relative aspect-video w-full overflow-hidden bg-gray-900 group-hover:brightness-110 transition-all shrink-0", isSoldOut && "grayscale opacity-60")}>
@@ -210,7 +212,7 @@ export default function MarketplacePage() {
   const [allItems, setAllItems] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch Real Prices
+  // Prices Ticker
   useEffect(() => {
     getCryptoPrices().then(setPrices);
     const i = setInterval(() => getCryptoPrices().then(setPrices), 60000);
@@ -227,7 +229,9 @@ export default function MarketplacePage() {
   // --- MULTI-CHAIN DATA AGGREGATION ---
   useEffect(() => {
     const fetchMultiChainData = async () => {
-      setIsLoading(true);
+      // Only show full loader on first mount
+      if (allItems.length === 0) setIsLoading(true);
+      
       const chains = [datahaven, arcTestnet];
       const aggregatedItems: any[] = [];
 
@@ -235,21 +239,53 @@ export default function MarketplacePage() {
         try {
           const client = createPublicClient({ chain, transport: http() });
           const contractAddr = CONTRACT_ADDRESSES[chain.id];
-          
           if (!contractAddr) return;
 
+          // 1. Fetch Items
           const items = await client.readContract({
             address: contractAddr,
             abi: PAYLOCK_ABI,
             functionName: 'getMarketplaceItems',
           }) as any[];
 
-          const taggedItems = items.map(item => ({
-            ...item,
-            chainId: chain.id,
-            chainName: chain.name,
-            currency: chain.nativeCurrency.symbol
+          // 2. Fetch Listing Events to get Timestamps
+          const currentBlock = await client.getBlockNumber();
+          const fromBlock = currentBlock - BigInt(3000) > BigInt(0) ? currentBlock - BigInt(3000) : BigInt(0);
+          
+          const listingLogs = await client.getLogs({
+            address: contractAddr,
+            event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)'),
+            fromBlock
+          });
+
+          const itemBlockMap = new Map();
+          listingLogs.forEach(log => {
+            if(log.args.id) itemBlockMap.set(log.args.id.toString(), log.blockNumber);
+          });
+
+          // Fetch Timestamps
+          const uniqueBlocks = Array.from(new Set(itemBlockMap.values())) as bigint[];
+          const blockTimestamps: Record<string, number> = {};
+          
+          await Promise.all(uniqueBlocks.map(async (bn) => {
+             try {
+                const block = await client.getBlock({ blockNumber: bn });
+                blockTimestamps[bn.toString()] = Number(block.timestamp);
+             } catch {}
           }));
+
+          const taggedItems = items.map(item => {
+            const blockNum = itemBlockMap.get(item.id.toString());
+            const timestamp = blockNum ? blockTimestamps[blockNum.toString()] : 0; 
+            
+            return {
+              ...item,
+              chainId: chain.id,
+              chainName: chain.name,
+              currency: chain.nativeCurrency.symbol,
+              timestamp: timestamp || 0 
+            };
+          });
 
           aggregatedItems.push(...taggedItems);
         } catch (e) {
@@ -262,8 +298,11 @@ export default function MarketplacePage() {
     };
 
     fetchMultiChainData();
+    const intervalId = setInterval(fetchMultiChainData, 15000); 
+    return () => clearInterval(intervalId);
   }, []);
 
+  // --- FILTER & SORT LOGIC ---
   const filteredItems = useMemo(() => {
     let items = allItems.filter((item) => {
       const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
@@ -272,19 +311,27 @@ export default function MarketplacePage() {
       const matchesView = view === 'ACTIVE' ? !isSoldOut : isSoldOut;
       return matchesSearch && matchesFilter && matchesView;
     });
-    if (sort === "NEWEST") items = items.reverse();
-    if (sort === "PRICE_LOW") items = items.sort((a, b) => Number(a.price) - Number(b.price));
-    if (sort === "PRICE_HIGH") items = items.sort((a, b) => Number(b.price) - Number(a.price));
-    return items;
+
+    const sorted = [...items];
+    
+    if (sort === "NEWEST") {
+        sorted.sort((a, b) => b.timestamp - a.timestamp);
+    } else if (sort === "PRICE_LOW") {
+        sorted.sort((a, b) => Number(a.price) - Number(b.price));
+    } else if (sort === "PRICE_HIGH") {
+        sorted.sort((a, b) => Number(b.price) - Number(a.price));
+    }
+    
+    return sorted;
   }, [allItems, filter, search, sort, view]);
 
   if (!mounted) return null;
   if (showSplash) return <SplashScreen onEnter={() => setShowSplash(false)} />;
 
   return (
-    <div className="min-h-screen bg-background text-white font-display overflow-x-hidden">
+    <div className="min-h-screen bg-background text-white font-display overflow-x-hidden flex flex-col">
       <Navigation />
-      <main className="max-w-[1440px] mx-auto px-4 md:px-6 py-8 md:py-12 relative z-10">
+      <main className="flex-1 w-full max-w-[1440px] mx-auto px-4 md:px-6 py-8 md:py-12 relative z-10">
         
         {/* Toggle Controls (Mobile) */}
         <div className="md:hidden flex w-full mb-6">
@@ -324,16 +371,16 @@ export default function MarketplacePage() {
           </div>
         </div>
 
-        {/* Categories - Horizontal Scroll */}
+        {/* Categories */}
         <div className="flex flex-nowrap gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
           {["ALL", "AUDIO", "VIDEO", "DATA", "ARCHIVE"].map((f) => (
             <button key={f} onClick={() => setFilter(f)} className={cn("px-5 py-2.5 rounded-xl text-xs font-bold font-mono transition-all border whitespace-nowrap", filter === f ? "bg-primary/20 text-primary border-primary shadow-neon" : "bg-surface text-white/60 border-white/10 hover:border-white/30 hover:text-white")}>{f}</button>
           ))}
         </div>
 
-        {/* Responsive Grid */}
+        {/* Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 auto-rows-fr pb-20">
-          {isLoading ? (
+          {isLoading && allItems.length === 0 ? (
              <div className="col-span-full py-40 text-center"><RefreshCw className="animate-spin mx-auto text-primary mb-4" size={40}/><p className="text-white/60 font-mono text-sm">Scanning Multi-Chain Ledger...</p></div>
           ) : filteredItems.length > 0 ? (
              filteredItems.map((item, i) => (<MarketplaceCard key={`${item.chainId}-${i}`} item={item} />))
@@ -342,20 +389,7 @@ export default function MarketplacePage() {
           )}
         </div>
       </main>
-      
-      {/* Ticker Footer (Hidden on very small screens if needed, usually fine) */}
-       <footer className="fixed bottom-0 left-0 w-full bg-black/80 backdrop-blur-md border-t border-white/10 py-2 z-50 overflow-hidden">
-        <div className="flex whitespace-nowrap w-full animate-[shimmer_30s_linear_infinite]">
-          <div className="flex gap-12 items-center px-4 text-xs font-mono text-white/60">
-            <span className="flex items-center gap-2"><span className="text-primary">•</span> MOCK: $1.00</span>
-            <span className="flex items-center gap-2"><span className="text-secondary">•</span> BTC: ${prices.BTC.toLocaleString()}</span>
-            <span className="flex items-center gap-2"><span className="text-success">•</span> ETH: ${prices.ETH.toLocaleString()}</span>
-            <span className="flex items-center gap-2"><span className="text-primary">•</span> SOL: ${prices.SOL.toLocaleString()}</span>
-            <span className="flex items-center gap-2"><span className="text-secondary">•</span> NODES: 4,521</span>
-            <span className="flex items-center gap-2"><span className="text-success">•</span> GAS: 12 GWEI</span>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

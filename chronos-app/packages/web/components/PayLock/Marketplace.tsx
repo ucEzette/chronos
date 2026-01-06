@@ -44,7 +44,7 @@ export function Marketplace() {
     functionName: 'getMarketplaceItems',
   });
 
-  const allItems = (rawItems as MarketItem[]) || [];
+  const allItems = (rawItems as unknown as MarketItem[]) || [];
 
   // 2. FILTERING LOGIC
   const filtered = allItems.filter(i => {

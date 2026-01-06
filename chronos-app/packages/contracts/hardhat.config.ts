@@ -28,7 +28,7 @@ const config: HardhatUserConfig = {
         network: "datahaven",
         chainId: 55931,
         urls: {
-          apiURL: "https://testnet.dhscan.io/api/v2", 
+          apiURL: "https://testnet.dhscan.io/api", 
           browserURL: "https://testnet.dhscan.io/",
         },
       },
