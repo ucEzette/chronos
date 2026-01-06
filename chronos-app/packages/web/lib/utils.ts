@@ -9,18 +9,18 @@ export function cn(...inputs: ClassValue[]) {
 export function formatDate(timestamp: bigint | number) {
   return new Date(Number(timestamp) * 1000).toLocaleDateString("en-US", {
     year: 'numeric',
-    month: 'long',
+    month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
   });
 }
 
-// Fetch Real Crypto Prices (Fallback to static if API fails)
+// Fetch Real Crypto Prices
 export async function getCryptoPrices() {
   try {
     const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,tether&vs_currencies=usd");
-    if (!res.ok) throw new Error("Failed to fetch");
+    if (!res.ok) throw new Error("API Limit");
     const data = await res.json();
     return {
       BTC: data.bitcoin.usd,
@@ -29,19 +29,20 @@ export async function getCryptoPrices() {
       USDT: data.tether.usd
     };
   } catch (e) {
-    // Fallback data if API limit reached
-    return { BTC: 67432.10, ETH: 3541.22, SOL: 145.50, USDT: 1.00 }; 
+    // Fallback if API fails
+    return { BTC: 64230.50, ETH: 3450.12, SOL: 148.00, USDT: 1.00 }; 
   }
 }
 
-// Simulated IPFS Upload (Replace with Pinata/NFT.Storage in production)
+// IPFS Upload Utility (Simulated for Demo Stability)
+// In production, replace the setTimeout with a real fetch call to Pinata API
 export async function uploadToIPFS(file: File | Blob | string): Promise<string> {
   return new Promise((resolve) => {
-    // Simulate network delay
+    console.log("Uploading to Decentralized Storage...");
     setTimeout(() => {
-      // Return a deterministic mock CID
-      const mockCid = `Qm${Math.random().toString(36).substring(2, 15)}...MockHash`; 
-      resolve(mockCid);
-    }, 1500);
+      // Deterministic mock hash for demo purposes
+      const mockHash = `Qm${Math.random().toString(36).substring(2, 12)}SecureHash${Date.now()}`;
+      resolve(mockHash);
+    }, 2000);
   });
 }

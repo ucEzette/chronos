@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { formatEther } from "viem";
 import Link from "next/link";
-import { PAYLOCK_ABI, PAYLOCK_ADDRESS } from "@/lib/contracts";
+import { PAYLOCK_ABI, getContractAddress } from "@/lib/contracts"; // Updated Import
 import { Navigation } from "../components/Navigation";
 import { fetchIPFS } from "@/lib/ipfs"; 
 import { getCryptoPrices } from "@/lib/utils";
@@ -31,7 +31,7 @@ function SplashScreen({ onEnter }: { onEnter: () => void }) {
 
   return (
     <div className="fixed inset-0 bg-[#050b14] flex flex-col items-center justify-center relative overflow-hidden z-[100] font-display text-primary select-none px-4">
-      {/* ... (Background Effects same as previous) ... */}
+      {/* ... (Background Effects) ... */}
       <div className="relative z-10 flex flex-col items-center w-full max-w-sm">
         <h1 className="text-4xl md:text-5xl font-black tracking-[0.2em] mb-4 text-transparent bg-clip-text bg-gradient-to-b from-white to-primary drop-shadow-[0_0_10px_rgba(0,229,255,0.5)] text-center">CHRONOS</h1>
         {!loaded ? (
@@ -51,6 +51,8 @@ function MarketplaceCard({ item }: { item: any }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuying, setIsBuying] = useState(false);
   const [copied, setCopied] = useState(false);
+  
+  const { chain } = useAccount(); // Get chain
   const { writeContractAsync } = useWriteContract();
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -81,15 +83,17 @@ function MarketplaceCard({ item }: { item: any }) {
     else if (type.includes("AUDIO") && audioRef.current) { isPlaying ? audioRef.current.pause() : audioRef.current.play(); setIsPlaying(!isPlaying); }
   };
 
-  // FIX: Buy Logic
+  // FIX: Multi-Chain Buy Logic
   const handleBuy = async () => {
     if(isSoldOut) return;
     if(!confirm(`Buy ${item.name} for ${formatEther(item.price)} MOCK?`)) return;
     
     setIsBuying(true);
     try {
+      const activeContract = getContractAddress(chain?.id); // Dynamic Address
+      
       await writeContractAsync({
-        address: PAYLOCK_ADDRESS,
+        address: activeContract,
         abi: PAYLOCK_ABI,
         functionName: 'buyItem',
         args: [BigInt(item.id)],
@@ -163,7 +167,7 @@ export default function MarketplacePage() {
   const [mounted, setMounted] = useState(false);
   const [showSplash, setShowSplash] = useState(false);
   const [prices, setPrices] = useState({ BTC: 0, ETH: 0, SOL: 0 });
-  const { isConnected } = useAccount();
+  const { isConnected, chain } = useAccount(); // Get Chain
   const [filter, setFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("NEWEST");
@@ -183,7 +187,13 @@ export default function MarketplacePage() {
     else if (!isConnected) { sessionStorage.removeItem("chronos_splash_seen"); setShowSplash(false); }
   }, [isConnected]);
 
-  const { data: rawItems } = useReadContract({ address: PAYLOCK_ADDRESS, abi: PAYLOCK_ABI, functionName: "getMarketplaceItems" });
+  // FIX: Multi-Chain Read
+  const activeContract = getContractAddress(chain?.id);
+  const { data: rawItems } = useReadContract({ 
+    address: activeContract, 
+    abi: PAYLOCK_ABI, 
+    functionName: "getMarketplaceItems" 
+  });
   const allItems = (rawItems as any[]) || [];
 
   const filteredItems = useMemo(() => {

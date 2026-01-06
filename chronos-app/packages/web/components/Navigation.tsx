@@ -5,10 +5,10 @@ import { useAccount, useDisconnect, useBalance } from "wagmi";
 import { useRouter, usePathname } from "next/navigation";
 import { ConnectModal } from "./ConnectModal";
 import { cn } from "@/lib/utils";
-import { Terminal, Wallet, LogOut, Menu, X, User, LayoutDashboard, ShoppingCart } from "lucide-react";
+import { Terminal, Wallet, LogOut, Menu, X, User, LayoutDashboard, ShoppingCart, Globe } from "lucide-react";
 
 export function Navigation() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chain } = useAccount();
   const { disconnect } = useDisconnect();
   const { data: balance } = useBalance({ address }); 
   
@@ -43,6 +43,11 @@ export function Navigation() {
       router.push("/");
     }
   };
+
+  // Determine Currency Symbol & Network Name
+  const networkName = chain?.name || "Unknown Network";
+  const currencySymbol = chain?.id === 5042002 ? "USDC" : "MOCK";
+  const isWrongNetwork = chain?.id !== 55931 && chain?.id !== 5042002;
 
   return (
     <>
@@ -83,17 +88,23 @@ export function Navigation() {
               </button>
             </nav>
 
-            {/* Desktop Wallet & Mobile Toggle */}
+            {/* Wallet Section */}
             <div className="flex items-center gap-4">
               {/* Desktop Wallet UI */}
               <div className="hidden md:flex items-center gap-4">
                 {isConnected ? (
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
+                    {/* Network Badge */}
+                    <div className={cn("px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase flex items-center gap-2", 
+                      isWrongNetwork ? "bg-red-500/10 border-red-500/50 text-red-500" : "bg-primary/10 border-primary/30 text-primary")}>
+                      <Globe size={12}/> {isWrongNetwork ? "Wrong Net" : networkName}
+                    </div>
+
                     <div className="text-right bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 hover:border-primary/30 transition-colors cursor-pointer group/wallet" onClick={handleProfileClick}>
                       <div className="flex items-center gap-2 justify-end">
                         <span className="text-[10px] text-gray-400 font-mono group-hover/wallet:text-primary transition-colors">BAL:</span>
                         <span className="text-xs font-mono font-bold text-white">
-                          {balance ? Number(balance.formatted).toFixed(3) : "0.000"} MOCK
+                          {balance ? Number(balance.formatted).toFixed(3) : "0.000"} {currencySymbol}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 justify-end mt-0.5">
@@ -151,7 +162,9 @@ export function Navigation() {
               <div className="flex flex-col gap-3">
                 <div className="flex justify-between items-center bg-white/5 p-3 rounded-lg border border-white/10">
                   <span className="text-gray-400 text-xs">Balance</span>
-                  <span className="text-primary font-bold font-mono">{balance ? Number(balance.formatted).toFixed(3) : "0.00"} MOCK</span>
+                  <span className="text-primary font-bold font-mono">
+                    {balance ? Number(balance.formatted).toFixed(3) : "0.00"} {currencySymbol}
+                  </span>
                 </div>
                 <button onClick={handleDisconnect} className="w-full py-3 bg-red-500/10 text-red-500 rounded-lg font-bold text-sm border border-red-500/20 flex items-center justify-center gap-2">
                   <LogOut size={16}/> Disconnect Wallet

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAccount, useWriteContract, useSignMessage } from "wagmi";
 import { parseEther } from "viem";
 import { Navigation } from "../../components/Navigation";
-import { PAYLOCK_ABI, PAYLOCK_ADDRESS } from "../../lib/contracts";
+import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts"; // Import getContractAddress
 import { uploadToIPFS } from "../../lib/ipfs"; 
 import { signatureToKey, encryptFile } from "../../lib/crypto";
 import { cn } from "@/lib/utils";
@@ -27,7 +27,7 @@ function Toast({ message, type, onClose }: { message: string, type: 'success' | 
 
 export default function CreateListingPage() {
   const [mounted, setMounted] = useState(false);
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chain } = useAccount(); // Get current chain
   const { writeContractAsync } = useWriteContract();
   const { signMessageAsync } = useSignMessage();
   
@@ -120,8 +120,12 @@ export default function CreateListingPage() {
 
       // 5. CONTRACT CALL
       setStatus('TX');
+      
+      // Get the correct contract address for the current chain
+      const currentContractAddress = getContractAddress(chain?.id);
+
       await writeContractAsync({
-        address: PAYLOCK_ADDRESS,
+        address: currentContractAddress,
         abi: PAYLOCK_ABI,
         functionName: 'listItem',
         args: [

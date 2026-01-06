@@ -1,123 +1,36 @@
-export const PAYLOCK_ADDRESS = process.env.NEXT_PUBLIC_PAYLOCK_ADDRESS as `0x${string}`;
+import { parseAbi } from "viem";
 
-export const PAYLOCK_ABI = [
+// 1. Define Contract Addresses for Each Chain
+export const CONTRACT_ADDRESSES: Record<number, `0x${string}`> = {
+  55931: (process.env.NEXT_PUBLIC_PAYLOCK_ADDRESS_DATAHAVEN as `0x${string}`) || "0x...", // DataHaven
+  5042002: (process.env.NEXT_PUBLIC_PAYLOCK_ADDRESS_ARC as `0x${string}`) || "0x...",     // Arc Testnet
+};
+
+// 2. Helper to get the correct address safely
+// Defaults to DataHaven (55931) if chain is undefined
+export const getContractAddress = (chainId?: number) => {
+  return CONTRACT_ADDRESSES[chainId || 55931] || CONTRACT_ADDRESSES[55931];
+};
+
+// 3. Fallback export for legacy imports (Satisfies the 'has no exported member' error)
+export const PAYLOCK_ADDRESS = getContractAddress(55931);
+
+export const PAYLOCK_ABI = parseAbi([
   // Events
-  {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
-      { "indexed": true, "internalType": "address", "name": "seller", "type": "address" }
-    ],
-    "name": "ItemCanceled",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
-      { "indexed": true, "internalType": "address", "name": "seller", "type": "address" },
-      { "indexed": false, "internalType": "uint256", "name": "price", "type": "uint256" },
-      { "indexed": false, "internalType": "string", "name": "name", "type": "string" },
-      { "indexed": false, "internalType": "uint256", "name": "maxSupply", "type": "uint256" }
-    ],
-    "name": "ItemListed",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
-      { "indexed": true, "internalType": "address", "name": "buyer", "type": "address" }
-    ],
-    "name": "ItemPurchased",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
-      { "indexed": true, "internalType": "address", "name": "buyer", "type": "address" },
-      { "indexed": false, "internalType": "string", "name": "encryptedKey", "type": "string" }
-    ],
-    "name": "KeyDelivered",
-    "type": "event"
-  },
+  "event ItemCanceled(uint256 indexed id, address indexed seller)",
+  "event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)",
+  "event ItemPurchased(uint256 indexed id, address indexed buyer)",
+  "event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey)",
+  
   // Functions
-  {
-    "inputs": [
-      { "internalType": "string", "name": "_name", "type": "string" },
-      { "internalType": "string", "name": "_ipfsCid", "type": "string" },
-      { "internalType": "string", "name": "_previewCid", "type": "string" },
-      { "internalType": "string", "name": "_fileType", "type": "string" },
-      { "internalType": "uint256", "name": "_price", "type": "uint256" },
-      { "internalType": "uint256", "name": "_maxSupply", "type": "uint256" }
-    ],
-    "name": "listItem",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
-    "name": "buyItem",
-    "outputs": [],
-    "stateMutability": "payable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      { "internalType": "uint256", "name": "_id", "type": "uint256" },
-      { "internalType": "address", "name": "_buyer", "type": "address" },
-      { "internalType": "string", "name": "_keyForBuyer", "type": "string" }
-    ],
-    "name": "deliverKey",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
-    "name": "cancelListing",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "getMarketplaceItems",
-    "outputs": [
-      {
-        "components": [
-          { "internalType": "uint256", "name": "id", "type": "uint256" },
-          { "internalType": "address payable", "name": "seller", "type": "address" },
-          { "internalType": "string", "name": "name", "type": "string" },
-          { "internalType": "string", "name": "ipfsCid", "type": "string" },
-          { "internalType": "string", "name": "previewCid", "type": "string" },
-          { "internalType": "string", "name": "fileType", "type": "string" },
-          { "internalType": "uint256", "name": "price", "type": "uint256" },
-          { "internalType": "uint256", "name": "maxSupply", "type": "uint256" },
-          { "internalType": "uint256", "name": "soldCount", "type": "uint256" },
-          { "internalType": "bool", "name": "isSoldOut", "type": "bool" }
-        ],
-        "internalType": "struct PayLock.Item[]",
-        "name": "",
-        "type": "tuple[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      { "internalType": "uint256", "name": "_id", "type": "uint256" },
-      { "internalType": "address", "name": "_user", "type": "address" }
-    ],
-    "name": "checkOwnership",
-    "outputs": [
-      { "internalType": "bool", "name": "bought", "type": "bool" },
-      { "internalType": "string", "name": "key", "type": "string" }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  }
-] as const;
+  "function listItem(string _name, string _ipfsCid, string _previewCid, string _fileType, uint256 _price, uint256 _maxSupply) external",
+  "function buyItem(uint256 _id) external payable",
+  "function deliverKey(uint256 _id, address _buyer, string _keyForBuyer) external",
+  "function cancelListing(uint256 _id) external",
+  
+  // FIX: Replaced 'tuple(...)' with '((...))' for the array of structs
+  "function getMarketplaceItems() external view returns ((uint256 id, address seller, string name, string ipfsCid, string previewCid, string fileType, uint256 price, uint256 maxSupply, uint256 soldCount, bool isSoldOut)[])",
+  
+  "function checkOwnership(uint256 _id, address _user) external view returns (bool bought, string key)",
+  "function owner() view returns (address)"
+]);

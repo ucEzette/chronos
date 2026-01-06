@@ -2,7 +2,7 @@
 
 import { useReadContract, useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { formatEther, parseEther } from 'viem';
-import { PAYLOCK_ABI, PAYLOCK_ADDRESS } from '@/lib/contracts';
+import { PAYLOCK_ABI, getContractAddress } from '@/lib/contracts'; // Import getContractAddress
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -32,11 +32,14 @@ const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}
 export function Marketplace() {
   const [activeTab, setActiveTab] = useState<'active' | 'sold'>('active');
   const [search, setSearch] = useState("");
-  const { isConnected } = useAccount();
+  const { isConnected, chain } = useAccount(); // Get current chain
 
   // 1. DATA FETCHING
+  // Get the correct contract address for the current chain
+  const currentContractAddress = getContractAddress(chain?.id);
+
   const { data: rawItems, isLoading, refetch } = useReadContract({
-    address: PAYLOCK_ADDRESS,
+    address: currentContractAddress,
     abi: PAYLOCK_ABI,
     functionName: 'getMarketplaceItems',
   });
@@ -110,7 +113,7 @@ export function Marketplace() {
 
 /** MARKET ITEM CARD */
 function MarketItem({ item, onSuccess }: { item: MarketItem, onSuccess: () => void }) {
-  const { address } = useAccount();
+  const { address, chain } = useAccount(); // Get chain
   const router = useRouter();
   
   // Transaction Hooks
@@ -160,8 +163,11 @@ function MarketItem({ item, onSuccess }: { item: MarketItem, onSuccess: () => vo
     if (isSoldOut || isOwner || isProcessing) return;
     
     try {
+      // Get the correct contract address for the current chain
+      const currentContractAddress = getContractAddress(chain?.id);
+
       await writeContractAsync({
-        address: PAYLOCK_ADDRESS,
+        address: currentContractAddress,
         abi: PAYLOCK_ABI,
         functionName: 'buyItem',
         args: [item.id],
@@ -189,6 +195,9 @@ function MarketItem({ item, onSuccess }: { item: MarketItem, onSuccess: () => vo
 
   const isVideo = item.fileType.toUpperCase().includes('VIDEO') || item.fileType.toUpperCase().includes('MP4');
   const isAudio = item.fileType.toUpperCase().includes('AUDIO') || item.fileType.toUpperCase().includes('MP3');
+
+  // Determine Currency Symbol
+  const currencySymbol = chain?.id === 5042002 ? "USDC" : "MOCK"; // Default to MOCK
 
   return (
     <div className={cn(
@@ -298,7 +307,7 @@ function MarketItem({ item, onSuccess }: { item: MarketItem, onSuccess: () => vo
             </div>
             <div className="flex items-baseline gap-1">
               <span className="text-xl font-black text-white font-mono tracking-tight">{formatEther(item.price)}</span>
-              <span className="text-xs font-bold text-primary">ETH</span>
+              <span className="text-xs font-bold text-primary">{currencySymbol}</span> {/* Dynamic Symbol */}
             </div>
           </div>
 
