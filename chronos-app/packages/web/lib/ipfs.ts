@@ -1,5 +1,3 @@
-// packages/web/lib/ipfs.ts
-
 /**
  * UPLOADS A FILE TO IPFS (VIA PINATA)
  * Used by: create-listing/page.tsx
@@ -45,27 +43,49 @@ export const uploadToIPFS = async (file: File): Promise<string> => {
 };
 
 /**
+ * HELPER: GENERATE DIRECT GATEWAY URL
+ * Used by: Marketplace Card & Item Page for <img src /> tags.
+ * Returns a string URL that can be put directly into an image tag.
+ */
+export function getIPFSUrl(cid: string | undefined): string | null {
+  if (!cid) return null;
+  // Sanitize input to get raw CID
+  const cleanCid = cid
+    .replace("ipfs://", "")
+    .replace("https://ipfs.io/ipfs/", "")
+    .replace("https://gateway.pinata.cloud/ipfs/", "")
+    .trim();
+    
+  return `https://gateway.pinata.cloud/ipfs/${cleanCid}`;
+}
+
+/**
  * ROBUST IPFS FETCHER (GATEWAY ROTATION)
  * Used by: dashboard/page.tsx & components/PayLock/Marketplace.tsx
  * Strategy: Cycles through multiple public gateways to bypass 429 Rate Limits and CORS.
  */
 export const fetchIPFS = async (cid: string, mimeType?: string): Promise<Blob> => {
-  const cleanCid = cid.replace("ipfs://", "").trim();
+  // 1. Sanitize CID: Remove various prefixes to ensure we have the raw Hash
+  const cleanCid = cid
+    .replace("ipfs://", "")
+    .replace("https://ipfs.io/ipfs/", "")
+    .replace("https://gateway.pinata.cloud/ipfs/", "")
+    .trim();
   
   if (!cleanCid || cleanCid.startsWith("{") || cleanCid.includes("%7B")) {
     throw new Error("Invalid CID: The file reference appears corrupted.");
   }
 
-  // Gateway Priority List (Fastest/Most Reliable First)
-  // If you have a dedicated gateway, add it to the top of this list.
+  // 2. Gateway Priority List (Fastest/Most Reliable First)
   const gateways = [
     `https://gateway.pinata.cloud/ipfs/${cleanCid}`,
-    `https://cloudflare-ipfs.com/ipfs/${cleanCid}`,
     `https://ipfs.io/ipfs/${cleanCid}`,
+    `https://cloudflare-ipfs.com/ipfs/${cleanCid}`,
     `https://dweb.link/ipfs/${cleanCid}`,
     `https://w3s.link/ipfs/${cleanCid}`
   ];
 
+  // 3. Try fetching from gateways sequentially
   for (const url of gateways) {
     try {
       const controller = new AbortController();
