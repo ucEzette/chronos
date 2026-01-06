@@ -3,10 +3,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAccount, useBalance, useEnsName, useEnsAvatar, useDisconnect } from "wagmi";
-import { formatEther, parseAbiItem, createPublicClient, http } from "viem";
+import { formatEther, parseAbiItem, createPublicClient, http, type AbiEvent } from "viem"; // FIX: Import AbiEvent type
 import { Navigation } from "../../../components/Navigation";
-import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "../../../lib/contracts"; // Use Address Map
-import { datahaven, arcTestnet } from "../../../lib/chains"; // Import Chains
+import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "../../../lib/contracts"; 
+import { datahaven, arcTestnet } from "../../../lib/chains"; 
 import { fetchIPFS } from "../../../lib/ipfs";
 import { decryptFile } from "@/lib/crypto";
 import { cn } from "@/lib/utils";
@@ -15,14 +15,11 @@ import {
   Settings, Power, Copy, Wallet, Activity, Search, 
   CheckCircle2, RefreshCw, Download, Music, Video, FileText, User, 
   Clock, ArrowUpRight, ArrowDownLeft, Code, Twitter, Upload, Edit3, 
-  Link as LinkIcon, X, Camera, Shield, Ban, Globe
+  Link as LinkIcon, X, Camera, Shield, Ban, Globe, ExternalLink, Tag, Menu
 } from "lucide-react";
 
-// --- MULTI-CHAIN HELPERS ---
+// --- HELPERS ---
 const SUPPORTED_CHAINS = [datahaven, arcTestnet];
-
-// Helper to create a client for a specific chain on the fly
-const getClientForChain = (chain: any) => createPublicClient({ chain, transport: http() });
 
 const formatTimeAgo = (timestamp: number | undefined) => {
   if (!timestamp) return "Pending...";
@@ -42,7 +39,6 @@ export default function ProfilePage() {
   const profileAddress = (params?.address as string) || "";
   const isOwnProfile = connectedAddress?.toLowerCase() === profileAddress.toLowerCase();
 
-  // Basic Hooks (Active Chain Only for Balance - optional to aggregate balances too)
   const { data: balanceData } = useBalance({ address: profileAddress as `0x${string}` });
   const { data: ensName } = useEnsName({ address: profileAddress as `0x${string}` });
   const { data: ensAvatar } = useEnsAvatar({ name: ensName! });
@@ -56,7 +52,7 @@ export default function ProfilePage() {
   const [copied, setCopied] = useState(false);
   const [settings, setSettings] = useState({ displayName: "", avatarUrl: "", twitterHandle: "", ghostMode: false });
 
-  // --- AGGREGATED DATA FETCHING ---
+  // --- ROBUST DATA FETCHING ---
   useEffect(() => {
     if (!profileAddress) return;
 
@@ -68,14 +64,12 @@ export default function ProfilePage() {
       let totalCancels = 0;
 
       try {
-        // Iterate over all supported chains
         await Promise.all(SUPPORTED_CHAINS.map(async (chain) => {
-          const client = getClientForChain(chain);
+          const client = createPublicClient({ chain, transport: http() });
           const contractAddr = CONTRACT_ADDRESSES[chain.id];
-          
-          if(!contractAddr) return;
+          if (!contractAddr) return;
 
-          // 1. Fetch Items
+          // --- A. FETCH INVENTORY (Items Owned) ---
           try {
             const rawItems = await client.readContract({
               address: contractAddr,
@@ -83,8 +77,7 @@ export default function ProfilePage() {
               functionName: 'getMarketplaceItems',
             }) as any[];
 
-            // Check ownership for each item on THIS chain
-            // We use multicast if possible, but map for simplicity here
+            // Check ownership for this profile
             const enrichedItems = await Promise.all(rawItems.map(async (item) => {
               const ownership = await client.readContract({
                 address: contractAddr,
@@ -93,7 +86,6 @@ export default function ProfilePage() {
                 args: [item.id, profileAddress as `0x${string}`]
               }) as [boolean, string];
 
-              // If user bought it, add to inventory
               if (ownership[0]) {
                 return {
                   ...item,
@@ -109,67 +101,106 @@ export default function ProfilePage() {
             
             allItems.push(...enrichedItems.filter(Boolean));
 
-            // 2. Fetch Transactions (Logs)
+            // --- B. FETCH TRANSACTION HISTORY (Chunked) ---
             const currentBlock = await client.getBlockNumber();
-            const fromBlock = currentBlock - BigInt(10000) > BigInt(0) ? currentBlock - BigInt(10000) : BigInt(0); // Restrict range for RPC safety
+            const CHUNK_SIZE = BigInt(5000);
+            const SCAN_DEPTH = BigInt(50000); // Scan last ~1 week
+            let fromBlock = currentBlock - SCAN_DEPTH > BigInt(0) ? currentBlock - SCAN_DEPTH : BigInt(0);
+            
+            // Helper to fetch logs safely
+            const fetchLogsInChunks = async (eventName: string, args: any) => {
+              let logs: any[] = [];
+              for (let i = fromBlock; i < currentBlock; i += CHUNK_SIZE) {
+                const to = (i + CHUNK_SIZE) > currentBlock ? currentBlock : (i + CHUNK_SIZE);
+                try {
+                  const chunk = await client.getLogs({
+                    address: contractAddr,
+                    // FIX: Explicitly cast to AbiEvent to solve the TS error
+                    event: parseAbiItem(eventName) as AbiEvent, 
+                    args,
+                    fromBlock: i,
+                    toBlock: to
+                  });
+                  logs = [...logs, ...chunk];
+                } catch (e) { console.warn(`Chunk failed on ${chain.name}`, e); }
+              }
+              return logs;
+            };
 
-            const [purchases, listings, cancels] = await Promise.all([
-              client.getLogs({ 
-                address: contractAddr, 
-                event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), 
-                args: { buyer: profileAddress as `0x${string}` }, 
-                fromBlock 
-              }),
-              client.getLogs({ 
-                address: contractAddr, 
-                event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price)'), 
-                args: { seller: profileAddress as `0x${string}` }, 
-                fromBlock 
-              }),
-              client.getLogs({ 
-                address: contractAddr, 
-                event: parseAbiItem('event ItemCanceled(uint256 indexed id, address indexed seller)'), 
-                args: { seller: profileAddress as `0x${string}` }, 
-                fromBlock 
-              })
+            // 1. Bought Events (Where I am buyer)
+            const purchases = await fetchLogsInChunks('event ItemPurchased(uint256 indexed id, address indexed buyer)', { buyer: profileAddress });
+            
+            // 2. Sold Events (Where I am seller)
+            const myListings = await fetchLogsInChunks('event ItemListed(uint256 indexed id, address indexed seller, uint256 price)', { seller: profileAddress });
+            
+            // Get all sales for items I listed
+            const myItemIds = new Set(myListings.map(l => l.args.id?.toString()));
+            // Fetch global purchases to find who bought my items
+            const allPurchases = await fetchLogsInChunks('event ItemPurchased(uint256 indexed id, address indexed buyer)', {}); 
+            const mySales = allPurchases.filter(l => myItemIds.has(l.args.id?.toString()));
+
+            // 3. Cancelled Events
+            const cancels = await fetchLogsInChunks('event ItemCanceled(uint256 indexed id, address indexed seller)', { seller: profileAddress });
+
+            // --- C. PROCESS & FORMAT TRANSACTIONS ---
+            
+            // Timestamp Cache
+            const blockCache: Record<string, number> = {};
+            const getTimestamp = async (bn: bigint) => {
+              if (blockCache[bn.toString()]) return blockCache[bn.toString()];
+              try {
+                const b = await client.getBlock({ blockNumber: bn });
+                blockCache[bn.toString()] = Number(b.timestamp);
+                return Number(b.timestamp);
+              } catch { return Date.now() / 1000; }
+            };
+
+            const formatTx = async (logs: any[], type: string, positive: boolean) => {
+              return Promise.all(logs.map(async (l) => {
+                const ts = await getTimestamp(l.blockNumber);
+                const relatedItem = rawItems.find((i:any) => i.id.toString() === l.args.id?.toString());
+                const txPrice = l.args.price || (relatedItem ? relatedItem.price : BigInt(0));
+
+                return {
+                  type,
+                  positive, // Is it money in (+) or money out (-)?
+                  hash: l.transactionHash,
+                  block: l.blockNumber,
+                  timestamp: ts,
+                  id: l.args.id?.toString(),
+                  price: txPrice,
+                  name: relatedItem ? relatedItem.name : "Unknown Item",
+                  chainId: chain.id,
+                  explorer: chain.blockExplorers?.default.url,
+                  currency: chain.nativeCurrency.symbol
+                };
+              }));
+            };
+
+            const [boughtTxs, soldTxs, listedTxs, cancelTxs] = await Promise.all([
+              formatTx(purchases, 'BOUGHT', false), // Money Out
+              formatTx(mySales, 'SOLD', true),      // Money In
+              formatTx(myListings, 'LISTED', false), // Neutral
+              formatTx(cancels, 'CANCELED', false)   // Neutral
             ]);
 
-            // Calculate Reputation Stats
-            const mySales = await client.getLogs({
-                address: contractAddr, 
-                event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), 
-                fromBlock 
-            });
-            // Filter purchases where the item ID matches an item sold by this profile
-            const myItemIds = new Set(rawItems.filter((i:any) => i.seller.toLowerCase() === profileAddress.toLowerCase()).map((i:any) => i.id.toString()));
-            totalSales += mySales.filter(l => myItemIds.has(l.args.id?.toString() || "")).length;
+            allTxs.push(...boughtTxs, ...soldTxs, ...listedTxs, ...cancelTxs);
+
+            // Reputation Calc
+            totalSales += mySales.length;
             totalCancels += cancels.length;
 
-            // Format Txs
-            const formatLog = (log: any, type: string) => ({
-              type,
-              hash: log.transactionHash,
-              block: log.blockNumber,
-              id: log.args.id?.toString(),
-              chainId: chain.id,
-              chainSymbol: chain.nativeCurrency.symbol
-            });
-
-            allTxs.push(...purchases.map(l => formatLog(l, 'PURCHASE')));
-            allTxs.push(...listings.map(l => formatLog(l, 'LISTING')));
-            allTxs.push(...cancels.map(l => formatLog(l, 'CANCEL')));
-
           } catch (err) {
-            console.error(`Error fetching chain ${chain.id}:`, err);
+            console.error(`Error scanning ${chain.name}:`, err);
           }
         }));
 
         setInventory(allItems);
-        setTransactions(allTxs.sort((a, b) => Number(b.block - a.block)));
+        setTransactions(allTxs.sort((a, b) => b.timestamp - a.timestamp));
         
-        // Update Reputation
-        let score = 50 + (totalSales * 5) - (totalCancels * 10);
-        setReputation(Math.min(Math.max(score, 0), 100));
+        // Simple Reputation Score Calculation
+        const score = Math.min(100, Math.max(0, 50 + (totalSales * 5) - (totalCancels * 5)));
+        setReputation(score);
 
       } finally {
         setIsLoading(false);
@@ -181,6 +212,7 @@ export default function ProfilePage() {
 
   // Handlers
   const handleCopy = () => { navigator.clipboard.writeText(profileAddress); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  
   const handleDecrypt = async (item: any) => {
     try {
       const blob = await fetchIPFS(item.ipfsCid);
@@ -195,7 +227,7 @@ export default function ProfilePage() {
   };
 
   const displayAvatar = settings.avatarUrl || ensAvatar;
-  const userLevel = Math.floor(Math.sqrt(inventory.length)) + 1;
+  const userLevel = Math.floor(Math.sqrt(transactions.length + 1));
 
   return (
     <div className="bg-[#020e14] text-white min-h-screen font-display overflow-x-hidden relative">
@@ -204,13 +236,13 @@ export default function ProfilePage() {
 
       <main className="flex-grow w-full max-w-[1440px] mx-auto p-4 md:p-8 flex flex-col lg:flex-row gap-8 relative z-10">
         
-        {/* PROFILE SIDEBAR */}
-        <aside className="w-full lg:w-80 flex flex-col gap-6 shrink-0">
+        {/* SIDEBAR */}
+        <aside className="w-full lg:w-80 flex flex-col gap-6 shrink-0 order-1 lg:order-none">
           <div className="rounded-xl border border-white/10 bg-[#0b1a24]/80 backdrop-blur-md p-6 flex flex-col items-center text-center relative overflow-hidden shadow-2xl">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-blue-500 to-primary"></div>
             
-            <div className="w-32 h-32 rounded-xl bg-black ring-4 ring-white/5 shadow-neon mb-4 overflow-hidden">
-               {displayAvatar ? <img src={displayAvatar} className="w-full h-full object-cover" /> : <User className="w-full h-full p-8 text-primary/50" />}
+            <div className="w-32 h-32 rounded-xl bg-black ring-4 ring-white/5 shadow-neon mb-4 overflow-hidden flex items-center justify-center">
+               {displayAvatar ? <img src={displayAvatar} className="w-full h-full object-cover" /> : <User className="w-12 h-12 text-primary/50" />}
             </div>
 
             <h1 className="text-2xl font-bold text-white mb-1 tracking-tight truncate w-full">{settings.displayName || "Time Traveler"}</h1>
@@ -223,7 +255,6 @@ export default function ProfilePage() {
               </button>
             </div>
 
-            {/* Aggregated Stats */}
             <div className="grid grid-cols-2 gap-3 w-full mb-6">
               <div className="bg-[#0f172a]/50 p-3 rounded-lg border border-white/5">
                 <p className="text-[10px] text-gray-400 uppercase mb-1">Reputation</p>
@@ -239,51 +270,86 @@ export default function ProfilePage() {
           </div>
         </aside>
 
-        {/* MAIN CONTENT AREA */}
-        <div className="flex-1 flex flex-col gap-6 min-w-0">
-           
-           {/* Tabs */}
+        {/* MAIN CONTENT */}
+        <div className="flex-1 flex flex-col gap-6 min-w-0 order-2 lg:order-none">
            <div className="flex overflow-x-auto pb-2 scrollbar-hide gap-1 border-b border-white/10">
             {['INVENTORY', 'TRANSACTIONS', 'SETTINGS'].map((tab) => (
               <button key={tab} onClick={() => setActiveTab(tab as any)} className={cn("px-6 py-3 rounded-t-lg font-bold text-xs tracking-wide transition-all border-t border-x", activeTab === tab ? "bg-primary text-black border-primary shadow-[0_-4px_20px_-5px_rgba(0,229,255,0.3)] relative z-10" : "bg-[#0f172a] text-gray-400 hover:text-white border-white/5 hover:bg-white/5")}>{tab}</button>
             ))}
           </div>
            
-           {/* Inventory Tab */}
+           {/* 1. INVENTORY TAB */}
            {activeTab === 'INVENTORY' && (
              <ProfileInventory items={inventory} isLoading={isLoading} onDecrypt={handleDecrypt} />
            )}
            
-           {/* Transactions Tab */}
+           {/* 2. TRANSACTIONS TAB */}
            {activeTab === 'TRANSACTIONS' && (
-            <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {isLoading ? (
                 <div className="py-20 text-center"><RefreshCw className="animate-spin mx-auto text-primary"/></div>
               ) : transactions.length > 0 ? (
                 transactions.map((tx, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-[#0b1a24]/60 border border-white/5 hover:border-primary/30 hover:bg-white/5 transition-all group">
+                  <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-[#0b1a24]/60 border border-white/5 hover:border-primary/30 hover:bg-white/5 transition-all group gap-4">
                     <div className="flex items-center gap-4">
-                      <div className={cn("p-2 rounded border", 
-                        tx.type === 'PURCHASE' ? "bg-green-500/10 text-green-500 border-green-500/20" : 
-                        tx.type === 'LISTING' ? "bg-blue-500/10 text-blue-500 border-blue-500/20" : 
-                        "bg-red-500/10 text-red-500 border-red-500/20"
+                      {/* Icon Box */}
+                      <div className={cn("p-3 rounded-lg border", 
+                        tx.type === 'BOUGHT' ? "bg-blue-500/10 border-blue-500/20 text-blue-500" :
+                        tx.type === 'SOLD' ? "bg-green-500/10 border-green-500/20 text-green-500" :
+                        tx.type === 'LISTED' ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500" :
+                        "bg-red-500/10 border-red-500/20 text-red-500"
                       )}>
-                        {tx.type === 'PURCHASE' ? <ArrowDownLeft size={18}/> : tx.type === 'LISTING' ? <ArrowUpRight size={18}/> : <Ban size={18}/>}
+                        {tx.type === 'BOUGHT' ? <ArrowDownLeft size={20}/> : 
+                         tx.type === 'SOLD' ? <ArrowUpRight size={20}/> :
+                         tx.type === 'LISTED' ? <Tag size={20}/> : <Ban size={20}/>}
                       </div>
+                      
+                      {/* Details */}
                       <div>
-                        <h4 className="text-white font-bold text-sm flex items-center gap-2">
-                          {tx.type} <span className="text-[10px] text-gray-500">#{tx.id}</span>
+                        <h4 className="text-white font-bold text-sm flex flex-wrap items-center gap-2">
+                          <span className={cn(
+                            tx.type === 'BOUGHT' ? "text-blue-400" :
+                            tx.type === 'SOLD' ? "text-green-400" :
+                            tx.type === 'LISTED' ? "text-yellow-400" : "text-red-400"
+                          )}>
+                            {tx.type === 'BOUGHT' ? 'Purchased Asset' : 
+                             tx.type === 'SOLD' ? 'Item Sold' : 
+                             tx.type === 'LISTED' ? 'Created Listing' : 'Canceled Item'}
+                          </span>
+                          
                           {/* Chain Badge */}
-                          <span className={cn("text-[9px] px-1.5 py-0.5 rounded border", tx.chainId === 55931 ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" : "bg-blue-600/20 text-blue-400 border-blue-600/30")}>
-                            {tx.chainId === 55931 ? "DH" : "ARC"}
+                          <span className={cn("text-[9px] px-1.5 py-0.5 rounded border flex items-center gap-1", tx.chainId === 55931 ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" : "bg-blue-600/20 text-blue-400 border-blue-600/30")}>
+                            <Globe size={8}/> {tx.chainId === 55931 ? "DataHaven" : "Arc"}
                           </span>
                         </h4>
-                        <p className="text-[10px] text-gray-500 font-mono">{tx.hash.slice(0,12)}...</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className="text-xs text-gray-400 font-mono">{tx.name} <span className="opacity-50">#{tx.id}</span></p>
+                          <span className="text-[10px] text-gray-600">•</span>
+                          <p className="text-[10px] text-gray-500 font-mono">{formatTimeAgo(tx.timestamp)}</p>
+                        </div>
                       </div>
                     </div>
-                    <a href={tx.chainId === 55931 ? `https://testnet.dhscan.io/tx/${tx.hash}` : `https://testnet.arcscan.app/tx/${tx.hash}`} target="_blank" className="flex items-center gap-2 text-xs text-gray-400 group-hover:text-primary">
-                      Explorer <ArrowUpRight size={14}/>
-                    </a>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto mt-2 sm:mt-0 pl-14 sm:pl-0">
+                      <div className="text-right">
+                        {(tx.type === 'BOUGHT' || tx.type === 'SOLD') && (
+                          <p className={cn("font-mono font-bold text-sm", tx.positive ? "text-green-400" : "text-red-400")}>
+                            {tx.positive ? '+' : '-'}{formatEther(tx.price)} {tx.currency}
+                          </p>
+                        )}
+                        {tx.type === 'LISTED' && <p className="font-mono text-xs text-yellow-500">{formatEther(tx.price)} {tx.currency}</p>}
+                      </div>
+                      
+                      <a 
+                        href={`${tx.explorer}/tx/${tx.hash}`} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="p-2 rounded-lg bg-white/5 hover:bg-primary/20 hover:text-primary text-gray-400 transition-colors border border-white/5"
+                        title="View on Explorer"
+                      >
+                        <ExternalLink size={16}/>
+                      </a>
+                    </div>
                   </div>
                 ))
               ) : (
@@ -294,14 +360,16 @@ export default function ProfilePage() {
             </div>
            )}
 
-           {/* Settings Tab (Same as before) */}
+           {/* 3. SETTINGS TAB */}
            {activeTab === 'SETTINGS' && (
              <div className="rounded-xl border border-white/10 bg-[#0b1a24]/80 p-6 animate-in fade-in space-y-8">
                <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                 <h3 className="text-white font-bold mb-2">Local Settings</h3>
-                 <div className="flex items-center justify-between">
-                   <span className="text-sm text-gray-400">Display Name</span>
-                   <input className="bg-black/50 border border-white/10 rounded px-2 py-1 text-sm text-white" value={settings.displayName} onChange={e => setSettings({...settings, displayName: e.target.value})} />
+                 <h3 className="text-white font-bold mb-2">Display Settings</h3>
+                 <div className="flex flex-col gap-4">
+                   <div>
+                     <label className="text-xs text-gray-400 block mb-1">Display Name</label>
+                     <input className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-primary outline-none transition-colors" value={settings.displayName} onChange={e => setSettings({...settings, displayName: e.target.value})} placeholder="Enter public name..." />
+                   </div>
                  </div>
                </div>
              </div>
