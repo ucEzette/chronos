@@ -6,6 +6,7 @@ import { formatEther, createPublicClient, http } from "viem";
 import Link from "next/link";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts"; 
 import { datahaven, arcTestnet } from "@/lib/chains"; 
+import { Footer } from "../components/Footer";
 import { Navigation } from "../components/Navigation";
 import { fetchIPFS } from "@/lib/ipfs"; 
 import { getCryptoPrices } from "@/lib/utils";

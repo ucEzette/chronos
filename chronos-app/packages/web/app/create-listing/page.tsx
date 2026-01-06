@@ -5,6 +5,7 @@ import { useAccount, useWriteContract, useSignMessage } from "wagmi";
 import { parseEther } from "viem";
 import { useRouter } from "next/navigation";
 import { Navigation } from "../../components/Navigation";
+import { Footer } from "../../components/Footer"; // Import Footer
 import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts"; 
 import { uploadToIPFS } from "../../lib/utils"; 
 import { signatureToKey, encryptFile } from "../../lib/crypto";
@@ -284,6 +285,7 @@ export default function CreateListingPage() {
           </div>
         )}
       </main>
+      <Footer /> {/* Render Footer */}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );

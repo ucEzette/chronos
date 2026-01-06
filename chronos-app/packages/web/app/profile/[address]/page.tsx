@@ -7,6 +7,7 @@ import { formatEther, parseAbiItem, createPublicClient, http, type AbiEvent } fr
 import { Navigation } from "../../../components/Navigation";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "../../../lib/contracts"; 
 import { datahaven, arcTestnet } from "../../../lib/chains"; 
+import { Footer } from "../../../components/Footer";
 import { fetchIPFS } from "../../../lib/ipfs";
 import { decryptFile } from "@/lib/crypto";
 import { cn } from "@/lib/utils";
@@ -376,6 +377,7 @@ export default function ProfilePage() {
            )}
         </div>
       </main>
+      <Footer /> {/* Render Footer */}
     </div>
   );
 }

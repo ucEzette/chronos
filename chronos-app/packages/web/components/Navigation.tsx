@@ -5,7 +5,8 @@ import { useAccount, useDisconnect, useBalance, useSwitchChain } from "wagmi";
 import { useRouter, usePathname } from "next/navigation";
 import { ConnectModal } from "./ConnectModal";
 import { cn } from "@/lib/utils";
-import { Terminal, Wallet, LogOut, Menu, X, User, LayoutDashboard, ShoppingCart, Globe, ChevronDown, Check, AlertTriangle } from "lucide-react";
+// Removed 'Terminal' from imports as it's no longer needed for the logo
+import { Wallet, LogOut, Menu, X, User, LayoutDashboard, ShoppingCart, Globe, ChevronDown, Check, AlertTriangle } from "lucide-react";
 import { arcTestnet, datahaven } from "@/lib/chains"; 
 
 export function Navigation() {
@@ -81,13 +82,15 @@ export function Navigation() {
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12">
           <div className="flex items-center justify-between">
             
-            {/* Brand */}
-            <div className="flex items-center gap-2 md:gap-3 cursor-pointer group z-50" onClick={() => router.push("/")}>
-              <div className="size-8 rounded bg-primary/20 flex items-center justify-center text-primary border border-primary/30 shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-transform group-hover:scale-110">
-                <Terminal size={18} />
-              </div>
-              <h1 className="text-base md:text-xl font-black text-white tracking-[0.2em] uppercase group-hover:text-primary transition-colors">Chronos</h1>
+            {/* --- REPLACED BRAND SECTION --- */}
+            <div className="flex items-center cursor-pointer group z-50" onClick={() => router.push("/")}>
+              <img 
+                src="/chronos-logo.png" 
+                alt="Chronos Logo" 
+                className="h-10 md:h-14 w-auto object-contain transition-transform group-hover:scale-105" 
+              />
             </div>
+            {/* ------------------------------ */}
 
             {/* Desktop Nav */}
             <nav className="hidden lg:flex gap-8 text-xs font-bold uppercase tracking-widest">

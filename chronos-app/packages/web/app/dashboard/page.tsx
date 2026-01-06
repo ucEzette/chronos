@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAccount, useReadContract, useWriteContract, useWatchContractEvent, usePublicClient, useReadContracts, useSignMessage } from "wagmi";
 import { parseAbiItem, formatEther } from "viem";
 import { Navigation } from "../../components/Navigation";
+import { Footer } from "../../components/Footer"; // Import Footer
 import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts"; 
 import { signatureToKey } from "@/lib/crypto";
 import { cn } from "@/lib/utils";
@@ -368,6 +369,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+      <Footer /> {/* Render Footer */}  
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
