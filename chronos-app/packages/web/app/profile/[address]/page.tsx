@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAccount, useBalance, useEnsName, useEnsAvatar, useDisconnect } from "wagmi";
-import { formatEther, parseAbiItem, createPublicClient, http, type AbiEvent } from "viem"; // FIX: Import AbiEvent type
+import { formatEther, parseAbiItem, createPublicClient, http, type AbiEvent } from "viem"; // FIX: Import AbiEvent
 import { Navigation } from "../../../components/Navigation";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "../../../lib/contracts"; 
 import { datahaven, arcTestnet } from "../../../lib/chains"; 
@@ -78,7 +78,7 @@ export default function ProfilePage() {
               functionName: 'getMarketplaceItems',
             }) as any[];
 
-            // Check ownership for this profile
+            // Check ownership
             const enrichedItems = await Promise.all(rawItems.map(async (item) => {
               const ownership = await client.readContract({
                 address: contractAddr,
@@ -105,7 +105,7 @@ export default function ProfilePage() {
             // --- B. FETCH TRANSACTION HISTORY (Chunked) ---
             const currentBlock = await client.getBlockNumber();
             const CHUNK_SIZE = BigInt(5000);
-            const SCAN_DEPTH = BigInt(50000); // Scan last ~1 week
+            const SCAN_DEPTH = BigInt(100000); // 100k block scan
             let fromBlock = currentBlock - SCAN_DEPTH > BigInt(0) ? currentBlock - SCAN_DEPTH : BigInt(0);
             
             // Helper to fetch logs safely
@@ -116,36 +116,36 @@ export default function ProfilePage() {
                 try {
                   const chunk = await client.getLogs({
                     address: contractAddr,
-                    // FIX: Explicitly cast to AbiEvent to solve the TS error
+                    // FIX: Cast to AbiEvent to solve TypeScript error
                     event: parseAbiItem(eventName) as AbiEvent, 
                     args,
                     fromBlock: i,
                     toBlock: to
                   });
                   logs = [...logs, ...chunk];
-                } catch (e) { console.warn(`Chunk failed on ${chain.name}`, e); }
+                } catch (e) { /* silent continue */ }
               }
               return logs;
             };
 
-            // 1. Bought Events (Where I am buyer)
+            // 1. Bought Events
             const purchases = await fetchLogsInChunks('event ItemPurchased(uint256 indexed id, address indexed buyer)', { buyer: profileAddress });
             
-            // 2. Sold Events (Where I am seller)
+            // 2. Listing Events (to find sales)
             const myListings = await fetchLogsInChunks('event ItemListed(uint256 indexed id, address indexed seller, uint256 price)', { seller: profileAddress });
             
-            // Get all sales for items I listed
+            // Get sales: Find ALL purchases in range and filter for my items
             const myItemIds = new Set(myListings.map(l => l.args.id?.toString()));
-            // Fetch global purchases to find who bought my items
-            const allPurchases = await fetchLogsInChunks('event ItemPurchased(uint256 indexed id, address indexed buyer)', {}); 
-            const mySales = allPurchases.filter(l => myItemIds.has(l.args.id?.toString()));
+            let mySales: any[] = [];
+            if(myListings.length > 0) {
+                const allPurchases = await fetchLogsInChunks('event ItemPurchased(uint256 indexed id, address indexed buyer)', {}); 
+                mySales = allPurchases.filter(l => myItemIds.has(l.args.id?.toString()));
+            }
 
-            // 3. Cancelled Events
+            // 3. Cancel Events
             const cancels = await fetchLogsInChunks('event ItemCanceled(uint256 indexed id, address indexed seller)', { seller: profileAddress });
 
             // --- C. PROCESS & FORMAT TRANSACTIONS ---
-            
-            // Timestamp Cache
             const blockCache: Record<string, number> = {};
             const getTimestamp = async (bn: bigint) => {
               if (blockCache[bn.toString()]) return blockCache[bn.toString()];
@@ -164,7 +164,7 @@ export default function ProfilePage() {
 
                 return {
                   type,
-                  positive, // Is it money in (+) or money out (-)?
+                  positive,
                   hash: l.transactionHash,
                   block: l.blockNumber,
                   timestamp: ts,
@@ -179,15 +179,14 @@ export default function ProfilePage() {
             };
 
             const [boughtTxs, soldTxs, listedTxs, cancelTxs] = await Promise.all([
-              formatTx(purchases, 'BOUGHT', false), // Money Out
-              formatTx(mySales, 'SOLD', true),      // Money In
-              formatTx(myListings, 'LISTED', false), // Neutral
-              formatTx(cancels, 'CANCELED', false)   // Neutral
+              formatTx(purchases, 'BOUGHT', false),
+              formatTx(mySales, 'SOLD', true),
+              formatTx(myListings, 'LISTED', false),
+              formatTx(cancels, 'ARCHIVED', false)
             ]);
 
             allTxs.push(...boughtTxs, ...soldTxs, ...listedTxs, ...cancelTxs);
 
-            // Reputation Calc
             totalSales += mySales.length;
             totalCancels += cancels.length;
 
@@ -199,7 +198,6 @@ export default function ProfilePage() {
         setInventory(allItems);
         setTransactions(allTxs.sort((a, b) => b.timestamp - a.timestamp));
         
-        // Simple Reputation Score Calculation
         const score = Math.min(100, Math.max(0, 50 + (totalSales * 5) - (totalCancels * 5)));
         setReputation(score);
 
@@ -231,11 +229,11 @@ export default function ProfilePage() {
   const userLevel = Math.floor(Math.sqrt(transactions.length + 1));
 
   return (
-    <div className="bg-[#020e14] text-white min-h-screen font-display overflow-x-hidden relative">
+    <div className="bg-[#020e14] text-white min-h-screen font-display overflow-x-hidden relative flex flex-col">
       <div className="fixed inset-0 z-0 pointer-events-none bg-[linear-gradient(rgba(0,229,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(0,229,255,0.05)_1px,transparent_1px)] bg-[size:40px_40px] opacity-20"></div>
       <Navigation />
 
-      <main className="flex-grow w-full max-w-[1440px] mx-auto p-4 md:p-8 flex flex-col lg:flex-row gap-8 relative z-10">
+      <main className="flex-grow w-full max-w-[1440px] mx-auto p-4 md:p-8 flex flex-col lg:flex-row gap-8 relative z-10 w-full">
         
         {/* SIDEBAR */}
         <aside className="w-full lg:w-80 flex flex-col gap-6 shrink-0 order-1 lg:order-none">
@@ -315,7 +313,7 @@ export default function ProfilePage() {
                           )}>
                             {tx.type === 'BOUGHT' ? 'Purchased Asset' : 
                              tx.type === 'SOLD' ? 'Item Sold' : 
-                             tx.type === 'LISTED' ? 'Created Listing' : 'Canceled Item'}
+                             tx.type === 'LISTED' ? 'Created Listing' : 'Archived Item'}
                           </span>
                           
                           {/* Chain Badge */}
@@ -377,7 +375,8 @@ export default function ProfilePage() {
            )}
         </div>
       </main>
-      <Footer /> {/* Render Footer */}
+      
+      <Footer />
     </div>
   );
 }

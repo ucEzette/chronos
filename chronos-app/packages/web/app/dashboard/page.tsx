@@ -3,13 +3,13 @@
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount, useReadContract, useWriteContract, useWatchContractEvent, usePublicClient, useReadContracts, useSignMessage } from "wagmi";
-import { parseAbiItem, formatEther } from "viem";
+import { parseAbiItem, formatEther, type AbiEvent } from "viem";
 import { Navigation } from "../../components/Navigation";
-import { Footer } from "../../components/Footer"; // Import Footer
+import { Footer } from "../../components/Footer";
 import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts"; 
 import { signatureToKey } from "@/lib/crypto";
 import { cn } from "@/lib/utils";
-import { Terminal, Key, ShoppingBag, Plus, Archive, Coins, Shield, CheckCircle2, AlertCircle, X, Loader2, RefreshCw, Download, Clock, Ban, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { Terminal, Key, ShoppingBag, Plus, Archive, Coins, Shield, CheckCircle2, AlertCircle, X, Loader2, RefreshCw, Download, Clock, Ban, ArrowUpRight, ArrowDownLeft, Trash2 } from "lucide-react";
 
 // --- Components ---
 function Toast({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) {
@@ -55,7 +55,7 @@ export default function DashboardPage() {
   // Dynamic Contract Address
   const activeContract = getContractAddress(chain?.id);
 
-  // 1. Read Current Items
+  // 1. Read Current Items from Contract
   const { data: rawItems, refetch: refetchItems } = useReadContract({
     address: activeContract, 
     abi: PAYLOCK_ABI, 
@@ -73,30 +73,65 @@ export default function DashboardPage() {
     query: { enabled: !!address && allItems.length > 0 }
   });
 
+  // Watchers for Real-time Updates
   useWatchContractEvent({ 
     address: activeContract, 
     abi: PAYLOCK_ABI, 
     eventName: 'ItemPurchased', 
     onLogs: () => { refetchItems(); fetchHistory(); } 
   });
+  useWatchContractEvent({ 
+    address: activeContract, 
+    abi: PAYLOCK_ABI, 
+    eventName: 'ItemCanceled', 
+    onLogs: () => { refetchItems(); fetchHistory(); } 
+  });
+  useWatchContractEvent({ 
+    address: activeContract, 
+    abi: PAYLOCK_ABI, 
+    eventName: 'ItemListed', 
+    onLogs: () => { refetchItems(); fetchHistory(); } 
+  });
   
-  // 2. Fetch Comprehensive History & Timestamps
+  // 2. Robust History Fetcher (Chunked to avoid RPC Limits)
   const fetchHistory = async () => {
     if (!publicClient || !activeContract) return;
     setLoadingHistory(true);
     try {
       const currentBlock = await publicClient.getBlockNumber();
-      const BLOCK_RANGE = BigInt(5000); // 5k limit for Arc safety
-      const fromBlock = (currentBlock - BLOCK_RANGE) > BigInt(0) ? (currentBlock - BLOCK_RANGE) : BigInt(0);
+      // Increase scan range to 100k blocks to find older items
+      const SCAN_DEPTH = BigInt(100000); 
+      const CHUNK_SIZE = BigInt(5000);
+      let fromBlock = currentBlock - SCAN_DEPTH > BigInt(0) ? currentBlock - SCAN_DEPTH : BigInt(0);
       
+      // Helper to fetch logs safely in chunks
+      const fetchLogsInChunks = async (eventName: string) => {
+        let logs: any[] = [];
+        for (let i = fromBlock; i < currentBlock; i += CHUNK_SIZE) {
+          const to = (i + CHUNK_SIZE) > currentBlock ? currentBlock : (i + CHUNK_SIZE);
+          try {
+            const chunk = await publicClient.getLogs({
+              address: activeContract,
+              event: parseAbiItem(eventName) as AbiEvent,
+              fromBlock: i,
+              toBlock: to
+            });
+            logs = [...logs, ...chunk];
+          } catch (e) { 
+            // Silent catch to continue loop if one chunk fails
+          }
+        }
+        return logs;
+      };
+
       const [pLogs, dLogs, cLogs, lLogs] = await Promise.all([
-        publicClient.getLogs({ address: activeContract, event: parseAbiItem('event ItemPurchased(uint256 indexed id, address indexed buyer)'), fromBlock }),
-        publicClient.getLogs({ address: activeContract, event: parseAbiItem('event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey)'), fromBlock }),
-        publicClient.getLogs({ address: activeContract, event: parseAbiItem('event ItemCanceled(uint256 indexed id, address indexed seller)'), fromBlock }),
-        publicClient.getLogs({ address: activeContract, event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)'), fromBlock })
+        fetchLogsInChunks('event ItemPurchased(uint256 indexed id, address indexed buyer)'),
+        fetchLogsInChunks('event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey)'),
+        fetchLogsInChunks('event ItemCanceled(uint256 indexed id, address indexed seller)'),
+        fetchLogsInChunks('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)')
       ]);
 
-      // Collect all unique block numbers to fetch timestamps efficiently
+      // Collect timestamps efficiently
       const allBlockNumbers = new Set([
         ...pLogs.map(l => l.blockNumber),
         ...dLogs.map(l => l.blockNumber),
@@ -105,11 +140,13 @@ export default function DashboardPage() {
       ]);
 
       const timestampMap: Record<string, number> = {};
-      await Promise.all(Array.from(allBlockNumbers).map(async (bn) => {
+      // Fetch mostly recent blocks to save RPC calls
+      const recentBlocks = Array.from(allBlockNumbers).sort().slice(-50); 
+      await Promise.all(recentBlocks.map(async (bn) => {
         try {
           const block = await publicClient.getBlock({ blockNumber: bn });
           timestampMap[bn.toString()] = Number(block.timestamp);
-        } catch(e) { console.warn("Timestamp fetch failed", e); }
+        } catch {}
       }));
 
       setBlockTimestamps(timestampMap);
@@ -130,17 +167,18 @@ export default function DashboardPage() {
     setMounted(true); 
   }, [publicClient, activeContract, chain?.id]); 
 
-  // 3. Unified Feed Logic (Includes ALL Types)
+  // 3. Unified Feed Logic
   const unifiedFeed = useMemo(() => {
     if (!address) return [];
     const feed: any[] = [];
     
-    // Map items for easier lookup
-    const itemMap = new Map(allItems.map(i => [i.id.toString(), i]));
-
     allItems.forEach((item: any, index: number) => {
       const itemId = item.id.toString();
       
+      // Determine cancellation status (Contract State OR Event History)
+      const eventCancelled = cancelledEvents.some(c => c.id === itemId);
+      const isCanceled = !item.isActive || eventCancelled;
+
       // -- SELLER PERSPECTIVE --
       if (item.seller.toLowerCase() === address.toLowerCase()) {
         
@@ -152,37 +190,31 @@ export default function DashboardPage() {
             ...item, 
             type: 'SALE', 
             buyer: sale.buyer, 
-            isDelivered, 
+            isDelivered,
+            isCanceled,
             timestamp: blockTimestamps[sale.block?.toString()] 
           });
         });
 
-        // 2. Listing Created Event (Only if not already sold out/cancelled to avoid dupes visually, or show all if desired)
+        // 2. Listing Created Event
         const creation = listingEvents.find(l => l.id === itemId);
-        if (creation) {
+        
+        // Show as a LISTING if it exists. 
+        // We do NOT check soldCount here, so the cancel button appears even if partially sold.
+        if (creation || !creation) { // Fallback if creation event missing but item exists
+           // Only show in feed if it's active OR if we want to show history of cancelled items
            feed.push({ 
              ...item, 
-             type: 'LISTED', 
+             type: isCanceled ? 'CANCELED' : 'LISTED', 
              buyer: null, 
-             timestamp: blockTimestamps[creation.block?.toString()] 
+             isCanceled,
+             timestamp: creation ? blockTimestamps[creation.block?.toString()] : 0 
            });
-        }
-
-        // 3. Cancelled Events
-        const cancellation = cancelledEvents.find(c => c.id === itemId);
-        if (cancellation) {
-          feed.push({
-            ...item,
-            type: 'CANCELED',
-            buyer: null,
-            timestamp: blockTimestamps[cancellation.block?.toString()]
-          });
         }
       }
 
       // -- BUYER PERSPECTIVE --
       const ownership = ownershipData?.[index]?.result as [boolean, string] | undefined;
-      // Also check sales events to get the timestamp of purchase
       const myPurchaseEvent = salesEvents.find(s => s.id === itemId && s.buyer.toLowerCase() === address.toLowerCase());
       
       if (ownership && ownership[0] === true) {
@@ -190,12 +222,14 @@ export default function DashboardPage() {
           ...item, 
           type: 'BOUGHT', 
           buyer: address,
+          isCanceled,
           timestamp: myPurchaseEvent ? blockTimestamps[myPurchaseEvent.block?.toString()] : undefined
         });
       }
     });
 
-    // Sort by timestamp descending (newest first)
+    // Sort by timestamp descending (Newest first)
+    // Filter out duplicates (e.g. same item showing as Listed and Cancelled)
     return feed.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
   }, [allItems, salesEvents, deliveryEvents, listingEvents, cancelledEvents, blockTimestamps, address, ownershipData]);
 
@@ -206,10 +240,11 @@ export default function DashboardPage() {
     return acc;
   }, { sold: 0, revenue: 0, bought: 0 }), [unifiedFeed]);
 
+  // --- ACTIONS ---
+
   const handleDeliver = async (item: any) => {
     try {
       setProcessingId(item.id.toString());
-      // 1. Retrieve Key (Local -> Signature)
       const localKeys = JSON.parse(localStorage.getItem('chronos_seller_keys') || '{}');
       let storedKey = localKeys[item.name.trim()];
       
@@ -218,7 +253,6 @@ export default function DashboardPage() {
         storedKey = signatureToKey(signature);
       }
       
-      // 2. Deliver via Contract
       await writeContractAsync({ 
         address: activeContract, 
         abi: PAYLOCK_ABI, 
@@ -227,9 +261,32 @@ export default function DashboardPage() {
       });
       
       setToast({message: "Key Transmitted Successfully!", type: 'success'});
-      fetchHistory(); // Refresh feed
+      fetchHistory(); 
     } catch (e: any) { 
       setToast({message: e.message || "Delivery Failed", type: 'error'}); 
+    } finally { 
+      setProcessingId(null); 
+    }
+  };
+
+  const handleCancel = async (item: any) => {
+    if(!confirm("Are you sure you want to cancel this listing? New buyers will be blocked.")) return;
+    try {
+      setProcessingId(item.id.toString());
+      await writeContractAsync({ 
+        address: activeContract, 
+        abi: PAYLOCK_ABI, 
+        functionName: 'cancelListing', 
+        args: [BigInt(item.id)] 
+      });
+      setToast({message: "Listing Cancelled!", type: 'success'});
+      
+      // Immediate manual update for UI responsiveness
+      setCancelledEvents(prev => [...prev, { id: item.id.toString(), block: BigInt(0) }]); 
+      fetchHistory();
+      refetchItems();
+    } catch (e: any) { 
+      setToast({message: e.message || "Cancel Failed", type: 'error'}); 
     } finally { 
       setProcessingId(null); 
     }
@@ -239,9 +296,9 @@ export default function DashboardPage() {
   const currencySymbol = chain?.id === 5042002 ? "USDC" : "MOCK";
 
   return (
-    <div className="min-h-screen bg-[#020e14] text-white font-display overflow-x-hidden">
+    <div className="min-h-screen bg-[#020e14] text-white font-display overflow-x-hidden flex flex-col">
       <Navigation />
-      <main className="max-w-[1280px] mx-auto px-4 md:px-6 py-8">
+      <main className="max-w-[1280px] mx-auto px-4 md:px-6 py-8 flex-1 w-full">
         
         {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
@@ -301,7 +358,7 @@ export default function DashboardPage() {
                   const isSale = item.type === 'SALE';
                   const isBought = item.type === 'BOUGHT';
                   const isListed = item.type === 'LISTED';
-                  const isCanceled = item.type === 'CANCELED';
+                  const isCanceled = item.type === 'CANCELED' || item.isCanceled;
 
                   return (
                     <tr key={`${item.type}-${i}`} className="group hover:bg-white/5 transition-colors">
@@ -333,16 +390,16 @@ export default function DashboardPage() {
                       </td>
                       <td className="py-4 px-6 text-center">
                         <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase", 
+                          isCanceled ? "bg-red-500/10 text-red-500 border-red-500/20" :
                           item.isDelivered ? "bg-green-500/10 text-green-500 border-green-500/20" : 
-                          item.type === 'CANCELED' ? "bg-red-500/10 text-red-500 border-red-500/20" :
                           item.type === 'SALE' && !item.isDelivered ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/20" : 
                           "bg-blue-500/10 text-blue-500 border-blue-500/20")}>
-                          {item.type === 'CANCELED' ? "Archived" : item.isDelivered ? "Completed" : item.type === 'SALE' ? "Pending Key" : "Active"}
+                          {isCanceled ? "Archived" : item.isDelivered ? "Completed" : item.type === 'SALE' ? "Pending Key" : "Active"}
                         </span>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        {/* ACTIVE ACTION BUTTON */}
-                        {isSale && !item.isDelivered && !item.isCanceled && (
+                        {/* DELIVER BUTTON (For Sales) */}
+                        {isSale && !item.isDelivered && !isCanceled && (
                           <button 
                             onClick={() => handleDeliver(item)} 
                             disabled={!!processingId} 
@@ -352,6 +409,20 @@ export default function DashboardPage() {
                             DELIVER KEY
                           </button>
                         )}
+                        
+                        {/* CANCEL BUTTON (For Active Listings) */}
+                        {isListed && !isCanceled && (
+                          <button 
+                            onClick={() => handleCancel(item)} 
+                            disabled={!!processingId} 
+                            className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ml-auto hover:scale-105 active:scale-95"
+                          >
+                            {processingId === item.id.toString() ? <Loader2 className="animate-spin" size={14}/> : <Trash2 size={14}/>} 
+                            CANCEL
+                          </button>
+                        )}
+
+                        {/* DOWNLOAD BUTTON (For Buyers) */}
                         {isBought && item.hasKey && (
                            <button className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded text-xs font-bold border border-white/10 ml-auto flex gap-2 items-center">
                              <Download size={12}/> Download
@@ -369,7 +440,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
-      <Footer /> {/* Render Footer */}  
+      <Footer />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );

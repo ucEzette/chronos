@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useAccount, useWriteContract, useSwitchChain } from "wagmi";
-import { formatEther, createPublicClient, http, parseAbiItem } from "viem"; // FIX: Added parseAbiItem
+// FIX: Added 'parseAbiItem' and 'AbiEvent' to imports
+import { formatEther, createPublicClient, http, parseAbiItem, type AbiEvent } from "viem"; 
 import Link from "next/link";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts"; 
 import { datahaven, arcTestnet } from "@/lib/chains"; 
@@ -11,10 +12,10 @@ import { Footer } from "../components/Footer";
 import { fetchIPFS, getIPFSUrl } from "@/lib/ipfs"; 
 import { getCryptoPrices } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-// FIX: Added ChevronUp
+// FIX: Added 'ChevronUp' to imports
 import { 
   Search, Video, FileText, Play, Archive, ChevronDown, ChevronUp,
-  User, Info, Pause, RefreshCw, Share2, Check, Globe, AlertTriangle
+  User, Info, Pause, RefreshCw, Share2, Check, Globe, AlertTriangle, ExternalLink
 } from "lucide-react";
 
 // --- SPLASH SCREEN ---
@@ -46,15 +47,8 @@ function SplashScreen({ onEnter }: { onEnter: () => void }) {
 
 // --- MARKETPLACE CARD ---
 function MarketplaceCard({ item }: { item: any }) {
-  const [showDetails, setShowDetails] = useState(false);
   const [meta, setMeta] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isBuying, setIsBuying] = useState(false);
-  const [copied, setCopied] = useState(false);
-  
-  const { chain } = useAccount(); 
-  const { writeContractAsync } = useWriteContract();
-  const { switchChainAsync } = useSwitchChain();
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -80,7 +74,7 @@ function MarketplaceCard({ item }: { item: any }) {
           }
         } catch {}
         setMeta({ image: url });
-      } catch (e) { console.error("Metadata load error", e); }
+      } catch (e) { console.error("Metadata error", e); }
     };
     loadMetadata();
   }, [item.previewCid]);
@@ -89,110 +83,90 @@ function MarketplaceCard({ item }: { item: any }) {
   const sold = Number(item.soldCount);
   const max = Number(item.maxSupply);
   const remaining = max - sold;
-  const isSoldOut = item.isSoldOut || sold >= max;
+  
+  // Status Logic
+  const isCanceled = !item.isActive; 
+  const isSoldOut = !isCanceled && (item.isSoldOut || sold >= max);
   const supplyPercentage = Math.floor((sold / max) * 100);
 
   const togglePlay = (e: React.MouseEvent) => {
+    e.preventDefault(); 
     e.stopPropagation();
     if (type.includes("VIDEO") && videoRef.current) { isPlaying ? videoRef.current.pause() : videoRef.current.play(); setIsPlaying(!isPlaying); }
     else if (type.includes("AUDIO") && audioRef.current) { isPlaying ? audioRef.current.pause() : audioRef.current.play(); setIsPlaying(!isPlaying); }
   };
 
-  const handleBuy = async () => {
-    if(isSoldOut) return;
-    if (chain?.id !== item.chainId) {
-      if(confirm(`This item is on ${item.chainName}. Switch network to buy?`)) {
-        try { await switchChainAsync({ chainId: item.chainId }); return; } 
-        catch (e) { alert("Network switch failed. Please switch manually."); return; }
-      }
-      return;
-    }
-    if(!confirm(`Buy ${item.name} for ${formatEther(item.price)} ${item.currency}?`)) return;
-    
-    setIsBuying(true);
-    try {
-      const contractAddr = CONTRACT_ADDRESSES[item.chainId];
-      await writeContractAsync({
-        address: contractAddr,
-        abi: PAYLOCK_ABI,
-        functionName: 'buyItem',
-        args: [BigInt(item.id)],
-        value: item.price
-      });
-      alert("Purchase Successful! Check Dashboard.");
-    } catch (e: any) {
-      alert("Purchase failed: " + (e.reason || e.message));
-    } finally {
-      setIsBuying(false);
-    }
-  };
-
-  const handleShare = () => {
-    const url = `${window.location.origin}/item/${item.id}?chain=${item.chainId}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   return (
-    <div className="group relative bg-[#0b1a24]/60 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden hover:border-primary/50 transition-all duration-300 hover:shadow-neon flex flex-col">
-      <div className="absolute top-3 right-3 z-20 flex gap-2">
-        <button onClick={handleShare} className="p-1 rounded bg-black/60 text-white hover:text-primary transition-colors" title="Copy Link">
-            {copied ? <Check size={14}/> : <Share2 size={14}/>}
-        </button>
+    <div className="group relative bg-[#0b1a24]/60 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden hover:border-primary/50 transition-all duration-300 hover:shadow-neon flex flex-col h-full">
+      <div className="absolute top-3 right-3 z-20 flex gap-2 pointer-events-none">
         <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold border shadow-sm backdrop-blur-md", item.chainId === 55931 ? "bg-cyan-900/80 text-cyan-400 border-cyan-500/30" : "bg-blue-900/80 text-blue-400 border-blue-500/30")}>
           <Globe size={10}/> {item.chainId === 55931 ? "DH" : "ARC"}
         </span>
         <span className="inline-flex items-center rounded-full bg-black/80 backdrop-blur-md px-2.5 py-1 text-[10px] font-bold text-primary border border-primary/30 shadow-sm">{type.replace('.', '')}</span>
       </div>
       
-      <div className={cn("relative aspect-video w-full overflow-hidden bg-gray-900 group-hover:brightness-110 transition-all shrink-0", isSoldOut && "grayscale opacity-60")}>
-        <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent opacity-80 z-10 pointer-events-none" />
-        {meta?.animation_url && type.includes("VIDEO") ? (
-          <video ref={videoRef} src={meta.animation_url} className="w-full h-full object-cover" loop muted={!isPlaying} poster={meta?.image}/>
-        ) : meta?.image ? (
-          <img src={meta.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" onError={(e) => (e.target as HTMLImageElement).src = "https://placehold.co/600x400/000/FFF?text=No+Preview"} />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-white/5"><FileText size={40} className="text-white/20"/></div>
-        )}
-        {meta?.animation_url && type.includes("AUDIO") && <audio ref={audioRef} src={meta.animation_url} loop />}
-        {!isSoldOut && (type.includes("VIDEO") || type.includes("AUDIO")) && (
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-20">
-            <button onClick={togglePlay} className="bg-primary text-black rounded-full p-4 shadow-neon hover:scale-110 transition-transform active:scale-95">
-              {isPlaying ? <Pause size={24} fill="currentColor"/> : <Play size={24} fill="currentColor"/>}
-            </button>
-          </div>
-        )}
-        {isSoldOut && <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px] flex items-center justify-center z-30 pointer-events-none"><div className="border-4 border-white text-white px-6 py-2 text-2xl font-black tracking-widest uppercase -rotate-12 mix-blend-overlay">SOLD OUT</div></div>}
-      </div>
+      <Link href={`/item/${item.id}?chain=${item.chainId}`} className="cursor-pointer block">
+        <div className={cn("relative aspect-video w-full overflow-hidden bg-gray-900 group-hover:brightness-110 transition-all shrink-0", (isSoldOut || isCanceled) && "grayscale opacity-60")}>
+          <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent opacity-80 z-10 pointer-events-none" />
+          
+          {meta?.animation_url && type.includes("VIDEO") ? (
+            <video ref={videoRef} src={meta.animation_url} className="w-full h-full object-cover" loop muted={!isPlaying} poster={meta?.image}/>
+          ) : meta?.image ? (
+            <img src={meta.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" onError={(e) => (e.target as HTMLImageElement).src = "https://placehold.co/600x400/000/FFF?text=No+Preview"} />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-white/5"><FileText size={40} className="text-white/20"/></div>
+          )}
+          
+          {meta?.animation_url && type.includes("AUDIO") && <audio ref={audioRef} src={meta.animation_url} loop />}
+          
+          {!isSoldOut && !isCanceled && (type.includes("VIDEO") || type.includes("AUDIO")) && (
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-20">
+              <button onClick={togglePlay} className="bg-primary text-black rounded-full p-4 shadow-neon hover:scale-110 transition-transform active:scale-95">
+                {isPlaying ? <Pause size={24} fill="currentColor"/> : <Play size={24} fill="currentColor"/>}
+              </button>
+            </div>
+          )}
+          
+          {(isSoldOut || isCanceled) && (
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px] flex items-center justify-center z-30 pointer-events-none">
+                <div className={cn("border-4 px-6 py-2 text-2xl font-black tracking-widest uppercase -rotate-12 mix-blend-overlay", isCanceled ? "border-red-500 text-red-500" : "border-white text-white")}>
+                    {isCanceled ? "ARCHIVED" : "SOLD OUT"}
+                </div>
+            </div>
+          )}
+        </div>
+      </Link>
 
       <div className="p-4 flex flex-col gap-3 flex-grow">
         <div>
-          <h3 className="text-lg font-bold text-white group-hover:text-primary transition-colors truncate">{item.name}</h3>
+          <Link href={`/item/${item.id}?chain=${item.chainId}`}>
+             <h3 className="text-lg font-bold text-white group-hover:text-primary transition-colors truncate cursor-pointer">{item.name}</h3>
+          </Link>
           <Link href={`/profile/${item.seller}`} className="text-xs font-mono text-primary/70 hover:text-primary flex items-center gap-1 mt-1 w-fit transition-colors">
              <User size={12}/> Seller: {item.seller.slice(0,6)}...{item.seller.slice(-4)}
           </Link>
         </div>
-        <div className="w-full bg-black/40 rounded-full h-1.5 mt-1 overflow-hidden relative border border-white/5"><div className={cn("h-full absolute left-0 top-0 transition-all", isSoldOut ? "bg-red-500" : "bg-secondary shadow-[0_0_10px_#2979FF]")} style={{ width: `${supplyPercentage}%` }}></div></div>
+        
+        <div className="w-full bg-black/40 rounded-full h-1.5 mt-1 overflow-hidden relative border border-white/5"><div className={cn("h-full absolute left-0 top-0 transition-all", isSoldOut ? "bg-red-500" : isCanceled ? "bg-gray-600" : "bg-secondary shadow-[0_0_10px_#2979FF]")} style={{ width: `${supplyPercentage}%` }}></div></div>
         <div className="flex justify-between text-[10px] font-mono text-white/60 -mt-1"><span>Supply: {remaining} / {max} Left</span><span>{supplyPercentage}% Sold</span></div>
         
-        {showDetails && <div className="bg-white/5 p-3 rounded-lg text-xs text-white/70 animate-in slide-in-from-top-2 font-mono border border-white/10"><h4 className="flex items-center gap-1 font-bold text-white mb-1 uppercase"><Info size={12}/> Description</h4><p className="mb-2 leading-relaxed opacity-80">{meta?.description || "No description."}</p></div>}
+        <div className="bg-white/5 p-2 rounded-lg border border-white/10 min-h-[3.5rem]">
+           <p className="text-[10px] text-gray-400 line-clamp-2 leading-relaxed">
+             {meta?.description || item.description || "No description provided."}
+           </p>
+        </div>
         
         <div className="mt-auto pt-3 border-t border-white/5 flex items-center justify-between gap-3">
           <div className="flex flex-col">
             <span className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Price</span>
             <span className="text-lg font-mono font-bold text-white tracking-tight">{formatEther(item.price)} {item.currency}</span>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => setShowDetails(!showDetails)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors border border-white/10">{showDetails ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>
-            <button 
-                onClick={handleBuy}
-                disabled={isSoldOut || isBuying} 
-                className={cn("px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg flex items-center gap-2 uppercase tracking-wide flex-1 justify-center active:scale-95", isSoldOut ? "bg-white/5 text-white/20 cursor-not-allowed border border-white/5" : "bg-primary hover:bg-white text-black shadow-neon hover:shadow-white/20")}
-            >
-                {isBuying ? <RefreshCw className="animate-spin" size={14}/> : isSoldOut ? "Unavailable" : "Buy Now"}
-            </button>
-          </div>
+          <Link 
+            href={`/item/${item.id}?chain=${item.chainId}`}
+            className={cn("px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg flex items-center gap-2 uppercase tracking-wide flex-1 justify-center active:scale-95 text-center", (isSoldOut || isCanceled) ? "bg-white/5 text-white/20 cursor-not-allowed border border-white/5" : "bg-primary hover:bg-white text-black shadow-neon hover:shadow-white/20")}
+          >
+            {isCanceled ? "Archived" : isSoldOut ? "Sold Out" : "View & Buy"}
+          </Link>
         </div>
       </div>
     </div>
@@ -208,7 +182,7 @@ export default function MarketplacePage() {
   const [filter, setFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("NEWEST");
-  const [view, setView] = useState<'ACTIVE' | 'SOLD'>('ACTIVE');
+  const [view, setView] = useState<'ACTIVE' | 'SOLD' | 'ARCHIVED'>('ACTIVE');
   const [allItems, setAllItems] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -229,7 +203,6 @@ export default function MarketplacePage() {
   // --- MULTI-CHAIN DATA AGGREGATION ---
   useEffect(() => {
     const fetchMultiChainData = async () => {
-      // Only show full loader on first mount
       if (allItems.length === 0) setIsLoading(true);
       
       const chains = [datahaven, arcTestnet];
@@ -239,7 +212,11 @@ export default function MarketplacePage() {
         try {
           const client = createPublicClient({ chain, transport: http() });
           const contractAddr = CONTRACT_ADDRESSES[chain.id];
-          if (!contractAddr) return;
+          
+          if (!contractAddr || contractAddr === "0x...") {
+             console.warn(`Contract address missing for ${chain.name}`);
+             return;
+          }
 
           // 1. Fetch Items
           const items = await client.readContract({
@@ -248,26 +225,47 @@ export default function MarketplacePage() {
             functionName: 'getMarketplaceItems',
           }) as any[];
 
-          // 2. Fetch Listing Events to get Timestamps
+          // 2. Fetch Listing Events (Chunked to prevent RPC 413 Errors)
           const currentBlock = await client.getBlockNumber();
-          const fromBlock = currentBlock - BigInt(3000) > BigInt(0) ? currentBlock - BigInt(3000) : BigInt(0);
+          const SCAN_DEPTH = BigInt(50000); 
+          const CHUNK_SIZE = BigInt(3000);  
+          let fromBlock = currentBlock - SCAN_DEPTH > BigInt(0) ? currentBlock - SCAN_DEPTH : BigInt(0);
           
-          const listingLogs = await client.getLogs({
-            address: contractAddr,
-            event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)'),
-            fromBlock
-          });
-
           const itemBlockMap = new Map();
-          listingLogs.forEach(log => {
-            if(log.args.id) itemBlockMap.set(log.args.id.toString(), log.blockNumber);
-          });
+          
+          // Helper to chunk the requests
+          const fetchChunks = async () => {
+            for (let i = fromBlock; i < currentBlock; i += CHUNK_SIZE) {
+              const to = (i + CHUNK_SIZE) > currentBlock ? currentBlock : (i + CHUNK_SIZE);
+              try {
+                const logs = await client.getLogs({
+                  address: contractAddr,
+                  event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)') as AbiEvent,
+                  fromBlock: i,
+                  toBlock: to
+                });
+                
+                logs.forEach(log => {
+                  // FIX: Explicitly cast 'log' to any to access args.id without TS error
+                  const args = (log as any).args;
+                  if(args && args.id) {
+                    itemBlockMap.set(args.id.toString(), log.blockNumber);
+                  }
+                });
+              } catch (e) {
+                // console.warn(`Chunk failed on ${chain.name} (${i}-${to}), skipping...`);
+              }
+            }
+          };
+          
+          await fetchChunks();
 
           // Fetch Timestamps
           const uniqueBlocks = Array.from(new Set(itemBlockMap.values())) as bigint[];
           const blockTimestamps: Record<string, number> = {};
+          const recentBlocks = uniqueBlocks.sort().slice(-50); 
           
-          await Promise.all(uniqueBlocks.map(async (bn) => {
+          await Promise.all(recentBlocks.map(async (bn) => {
              try {
                 const block = await client.getBlock({ blockNumber: bn });
                 blockTimestamps[bn.toString()] = Number(block.timestamp);
@@ -276,14 +274,14 @@ export default function MarketplacePage() {
 
           const taggedItems = items.map(item => {
             const blockNum = itemBlockMap.get(item.id.toString());
-            const timestamp = blockNum ? blockTimestamps[blockNum.toString()] : 0; 
+            const timestamp = blockNum ? blockTimestamps[blockNum.toString()] : (Date.now()/1000); 
             
             return {
               ...item,
               chainId: chain.id,
               chainName: chain.name,
               currency: chain.nativeCurrency.symbol,
-              timestamp: timestamp || 0 
+              timestamp: timestamp || 0
             };
           });
 
@@ -307,20 +305,30 @@ export default function MarketplacePage() {
     let items = allItems.filter((item) => {
       const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
       const matchesFilter = filter === "ALL" || item.fileType.toUpperCase().includes(filter);
-      const isSoldOut = item.isSoldOut || Number(item.soldCount) >= Number(item.maxSupply);
-      const matchesView = view === 'ACTIVE' ? !isSoldOut : isSoldOut;
+      
+      const soldCount = Number(item.soldCount);
+      const maxSupply = Number(item.maxSupply);
+      const isActive = item.isActive; 
+      
+      const isSoldOut = soldCount >= maxSupply || item.isSoldOut;
+      const isCanceled = !isActive;
+
+      let matchesView = false;
+      if (view === 'ACTIVE') matchesView = isActive && !isSoldOut;
+      else if (view === 'SOLD') matchesView = isActive && isSoldOut;
+      else if (view === 'ARCHIVED') matchesView = isCanceled; 
+
+      if (item.isActive === undefined) {
+         matchesView = view === 'ACTIVE' ? !item.isSoldOut : item.isSoldOut;
+      }
+
       return matchesSearch && matchesFilter && matchesView;
     });
 
     const sorted = [...items];
-    
-    if (sort === "NEWEST") {
-        sorted.sort((a, b) => b.timestamp - a.timestamp);
-    } else if (sort === "PRICE_LOW") {
-        sorted.sort((a, b) => Number(a.price) - Number(b.price));
-    } else if (sort === "PRICE_HIGH") {
-        sorted.sort((a, b) => Number(b.price) - Number(a.price));
-    }
+    if (sort === "NEWEST") sorted.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    else if (sort === "PRICE_LOW") sorted.sort((a, b) => Number(a.price) - Number(b.price));
+    else if (sort === "PRICE_HIGH") sorted.sort((a, b) => Number(b.price) - Number(a.price));
     
     return sorted;
   }, [allItems, filter, search, sort, view]);
@@ -332,8 +340,7 @@ export default function MarketplacePage() {
     <div className="min-h-screen bg-background text-white font-display overflow-x-hidden flex flex-col">
       <Navigation />
       <main className="flex-1 w-full max-w-[1440px] mx-auto px-4 md:px-6 py-8 md:py-12 relative z-10">
-        
-        {/* Toggle Controls (Mobile) */}
+        {/* Toggle Controls */}
         <div className="md:hidden flex w-full mb-6">
           <div className="flex flex-1 items-center justify-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 w-full">
             <button onClick={() => setView('ACTIVE')} className={cn("flex-1 px-4 py-3 rounded-lg text-xs font-bold transition-all", view === 'ACTIVE' ? "bg-primary text-black shadow-neon" : "text-white/60 hover:text-white")}>Active</button>

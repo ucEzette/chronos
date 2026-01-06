@@ -10,15 +10,10 @@ export const uploadToIPFS = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append('file', file);
 
-  // Optional: Add metadata to pinata for better organization
-  const metadata = JSON.stringify({
-    name: file.name,
-  });
+  const metadata = JSON.stringify({ name: file.name });
   formData.append('pinataMetadata', metadata);
 
-  const options = JSON.stringify({
-    cidVersion: 1,
-  });
+  const options = JSON.stringify({ cidVersion: 1 });
   formData.append('pinataOptions', options);
 
   try {
@@ -42,54 +37,67 @@ export const uploadToIPFS = async (file: File): Promise<string> => {
   }
 };
 
-/**
- * HELPER: GENERATE DIRECT GATEWAY URL
- * Used by: Marketplace Card & Item Page for <img src /> tags.
- * Returns a string URL that can be put directly into an image tag.
- */
-export function getIPFSUrl(cid: string | undefined): string | null {
-  if (!cid) return null;
-  // Sanitize input to get raw CID
-  const cleanCid = cid
+// --- HELPER: SANITIZE CID ---
+const cleanCid = (cid: string) => {
+  if (!cid) return "";
+  return cid
     .replace("ipfs://", "")
     .replace("https://ipfs.io/ipfs/", "")
     .replace("https://gateway.pinata.cloud/ipfs/", "")
+    .replace("https://cloudflare-ipfs.com/ipfs/", "")
     .trim();
-    
-  return `https://gateway.pinata.cloud/ipfs/${cleanCid}`;
+};
+
+/**
+ * HELPER: GENERATE DIRECT GATEWAY URL
+ * Used by: Marketplace Card & Item Page for <img src /> tags.
+ * PRIORITIZES: Your Dedicated Gateway in .env.local
+ */
+export function getIPFSUrl(cid: string | undefined): string | null {
+  if (!cid) return null;
+  const clean = cleanCid(cid);
+  
+  // 1. Check for Dedicated Gateway
+  const dedicated = process.env.NEXT_PUBLIC_IPFS_GATEWAY;
+  if (dedicated) {
+    // Ensure no trailing slash to avoid double //
+    return `${dedicated.replace(/\/$/, "")}/ipfs/${clean}`;
+  }
+
+  // 2. Fallback to Cloudflare (Fastest public gateway)
+  return `https://cloudflare-ipfs.com/ipfs/${clean}`;
 }
 
 /**
  * ROBUST IPFS FETCHER (GATEWAY ROTATION)
  * Used by: dashboard/page.tsx & components/PayLock/Marketplace.tsx
- * Strategy: Cycles through multiple public gateways to bypass 429 Rate Limits and CORS.
+ * Strategy: Tries Dedicated Gateway FIRST, then cycles public ones.
  */
 export const fetchIPFS = async (cid: string, mimeType?: string): Promise<Blob> => {
-  // 1. Sanitize CID: Remove various prefixes to ensure we have the raw Hash
-  const cleanCid = cid
-    .replace("ipfs://", "")
-    .replace("https://ipfs.io/ipfs/", "")
-    .replace("https://gateway.pinata.cloud/ipfs/", "")
-    .trim();
+  const clean = cleanCid(cid);
   
-  if (!cleanCid || cleanCid.startsWith("{") || cleanCid.includes("%7B")) {
+  if (!clean || clean.startsWith("{") || clean.includes("%7B")) {
     throw new Error("Invalid CID: The file reference appears corrupted.");
   }
 
-  // 2. Gateway Priority List (Fastest/Most Reliable First)
+  // 1. Build Priority List
+  const dedicated = process.env.NEXT_PUBLIC_IPFS_GATEWAY;
+  
   const gateways = [
-    `https://gateway.pinata.cloud/ipfs/${cleanCid}`,
-    `https://ipfs.io/ipfs/${cleanCid}`,
-    `https://cloudflare-ipfs.com/ipfs/${cleanCid}`,
-    `https://dweb.link/ipfs/${cleanCid}`,
-    `https://w3s.link/ipfs/${cleanCid}`
-  ];
+    // Priority #1: Dedicated Gateway
+    dedicated ? `${dedicated.replace(/\/$/, "")}/ipfs/${clean}` : null,
+    // Priority #2: Reliable Public Gateways
+    `https://cloudflare-ipfs.com/ipfs/${clean}`,
+    `https://ipfs.io/ipfs/${clean}`,
+    `https://gateway.pinata.cloud/ipfs/${clean}`, // Public Pinata (often rate limited)
+    `https://dweb.link/ipfs/${clean}`
+  ].filter(Boolean) as string[]; // Remove nulls
 
-  // 3. Try fetching from gateways sequentially
+  // 2. Try fetching sequentially
   for (const url of gateways) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout per gateway
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
       
       const response = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
@@ -97,26 +105,24 @@ export const fetchIPFS = async (cid: string, mimeType?: string): Promise<Blob> =
       if (response.ok) {
         const blob = await response.blob();
         
-        // Validation: Reject HTML error pages (Common issue with some gateways returning 200 OK for 404 pages)
+        // Reject HTML error pages disguised as 200 OK
         if (blob.type.includes("text/html") && (!mimeType || !mimeType.includes("html"))) {
-           // console.warn(`Gateway ${url} returned HTML instead of data. Skipping.`);
            continue; 
         }
         
         return blob; // Success!
       }
     } catch (e) {
-      // Gateway failed or timed out, silently continue to the next one
+      // Continue to next gateway on failure
       continue; 
     }
   }
   
-  throw new Error("All IPFS gateways failed to retrieve the file. The network might be busy.");
+  throw new Error("All IPFS gateways failed. Network may be busy or CID is invalid.");
 };
 
 /**
  * HELPER: RESOLVE METADATA JSON
- * Used to quickly fetch descriptions/images for the Marketplace
  */
 export const resolveMetadata = async (cid: string) => {
   try {
