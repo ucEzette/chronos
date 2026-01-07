@@ -7,12 +7,12 @@ import { parseAbiItem, formatEther, type AbiEvent } from "viem";
 import { Navigation } from "../../components/Navigation";
 import { Footer } from "../../components/Footer";
 import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts"; 
-import { signatureToKey, decryptFile } from "@/lib/crypto"; // Ensure decryptFile is imported
-import { fetchIPFS } from "@/lib/ipfs";
+import { signatureToKey, decryptFile } from "@/lib/crypto"; 
+import { fetchIPFS } from "@/lib/ipfs"; 
 import { cn } from "@/lib/utils";
 import { Terminal, Key, ShoppingBag, Plus, Archive, Coins, Shield, CheckCircle2, AlertCircle, X, Loader2, RefreshCw, Download, Clock, Ban, ArrowUpRight, ArrowDownLeft, Trash2 } from "lucide-react";
 
-// ... (Toast Component & formatTimeAgo Helper remain same) ...
+// --- Components ---
 function Toast({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 5000); return () => clearTimeout(t); }, [onClose]);
   return (
@@ -42,11 +42,11 @@ export default function DashboardPage() {
   const publicClient = usePublicClient();
   
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null); // New state
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
   
-  // ... (Event State: salesEvents, etc. same as before) ...
+  // Event State
   const [salesEvents, setSalesEvents] = useState<any[]>([]);
   const [deliveryEvents, setDeliveryEvents] = useState<any[]>([]);
   const [cancelledEvents, setCancelledEvents] = useState<any[]>([]);
@@ -55,6 +55,7 @@ export default function DashboardPage() {
 
   const activeContract = getContractAddress(chain?.id);
 
+  // 1. Read Current Items
   const { data: rawItems, refetch: refetchItems } = useReadContract({
     address: activeContract, 
     abi: PAYLOCK_ABI, 
@@ -72,17 +73,28 @@ export default function DashboardPage() {
     query: { enabled: !!address && allItems.length > 0 }
   });
 
-  // ... (Watchers & fetchHistory logic same as before) ...
-  // (Assuming you kept the robust fetchHistory logic from previous updates)
-  // ...
-
+  // Watchers
+  useWatchContractEvent({ 
+    address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemPurchased', 
+    onLogs: () => { refetchItems(); fetchHistory(); } 
+  });
+  useWatchContractEvent({ 
+    address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemCanceled', 
+    onLogs: () => { refetchItems(); fetchHistory(); } 
+  });
+  useWatchContractEvent({ 
+    address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemListed', 
+    onLogs: () => { refetchItems(); fetchHistory(); } 
+  });
+  
+  // 2. Fetch History (Chunked)
   const fetchHistory = async () => {
     if (!publicClient || !activeContract) return;
     setLoadingHistory(true);
     try {
       const currentBlock = await publicClient.getBlockNumber();
-      const SCAN_DEPTH = BigInt(100000); 
-      const CHUNK_SIZE = BigInt(5000);
+      const SCAN_DEPTH = BigInt(50000); 
+      const CHUNK_SIZE = BigInt(3000);
       let fromBlock = currentBlock - SCAN_DEPTH > BigInt(0) ? currentBlock - SCAN_DEPTH : BigInt(0);
       
       const fetchLogsInChunks = async (eventName: string) => {
@@ -164,7 +176,7 @@ export default function DashboardPage() {
         });
 
         const creation = listingEvents.find(l => l.id === itemId);
-        if (creation || !creation) { 
+        if (creation || !creation) {
            feed.push({ 
              ...item, type: isCanceled ? 'CANCELED' : 'LISTED', buyer: null, isCanceled,
              timestamp: creation ? blockTimestamps[creation.block?.toString()] : 0 
@@ -172,7 +184,6 @@ export default function DashboardPage() {
         }
       }
 
-      // BUYER LOGIC - Retrieve Key Here
       const ownership = ownershipData?.[index]?.result as [boolean, string] | undefined;
       const myPurchaseEvent = salesEvents.find(s => s.id === itemId && s.buyer.toLowerCase() === address.toLowerCase());
       
@@ -183,7 +194,7 @@ export default function DashboardPage() {
           buyer: address,
           isCanceled,
           hasKey: !!(ownership[1] && ownership[1].length > 0),
-          receivedKey: ownership[1], // IMPORTANT: Pass the key
+          receivedKey: ownership[1], // CRITICAL: Pass Key
           timestamp: myPurchaseEvent ? blockTimestamps[myPurchaseEvent.block?.toString()] : undefined
         });
       }
@@ -198,34 +209,7 @@ export default function DashboardPage() {
     return acc;
   }, { sold: 0, revenue: 0, bought: 0 }), [unifiedFeed]);
 
-  // --- HANDLERS ---
-
-  const handleDownload = async (item: any) => {
-    if (!item.hasKey) return;
-    try {
-      setDownloadingId(item.id.toString());
-      setToast({ message: "Fetching & Decrypting...", type: 'success' });
-      
-      const encryptedBlob = await fetchIPFS(item.ipfsCid);
-      const decryptedBlob = await decryptFile(encryptedBlob, item.receivedKey);
-      
-      const url = window.URL.createObjectURL(decryptedBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `${item.name}_UNLOCKED.${item.fileType?.toLowerCase() || 'dat'}`);
-      document.body.appendChild(link);
-      link.click();
-      
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(link);
-      setToast({ message: "Download Complete", type: 'success' });
-    } catch (e: any) {
-      setToast({ message: "Download Failed: " + e.message, type: 'error' });
-    } finally {
-      setDownloadingId(null);
-    }
-  };
-
+  // Handlers
   const handleDeliver = async (item: any) => {
     try {
       setProcessingId(item.id.toString());
@@ -250,6 +234,32 @@ export default function DashboardPage() {
       setToast({message: e.message || "Delivery Failed", type: 'error'}); 
     } finally { 
       setProcessingId(null); 
+    }
+  };
+
+  const handleDownload = async (item: any) => {
+    if (!item.hasKey) return;
+    try {
+      setDownloadingId(item.id.toString());
+      setToast({ message: "Fetching & Decrypting...", type: 'success' });
+      
+      const encryptedBlob = await fetchIPFS(item.ipfsCid);
+      const decryptedBlob = await decryptFile(encryptedBlob, item.receivedKey);
+      
+      const url = window.URL.createObjectURL(decryptedBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${item.name.replace(/\s+/g, '_')}_UNLOCKED.${item.fileType?.toLowerCase() || 'dat'}`);
+      document.body.appendChild(link);
+      link.click();
+      
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      setToast({ message: "Download Complete", type: 'success' });
+    } catch (e: any) {
+      setToast({ message: "Download Failed: " + e.message, type: 'error' });
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -281,8 +291,7 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-[#020e14] text-white font-display overflow-x-hidden flex flex-col">
       <Navigation />
       <main className="max-w-[1280px] mx-auto px-4 md:px-6 py-8 flex-1 w-full">
-        {/* ... (Header and Stats Grid same as before) ... */}
-        {/* HEADER */}
+        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs font-mono text-primary/80 mb-1 tracking-widest uppercase"><Terminal size={14}/> Chronos_Link :: Active</div>
@@ -293,9 +302,9 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* STATS GRID */}
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
-          {/* ... stats markup same as previous ... */}
+          {/* Stats Cards (Same as previous) */}
           <div className="bg-[#0b1a24]/60 border border-white/10 rounded-xl p-6 backdrop-blur-md hover:border-primary/50 transition-all">
             <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-primary/10 text-primary"><Coins size={24}/></div></div>
             <p className="text-gray-400 text-sm font-medium uppercase">Revenue</p>
@@ -405,7 +414,7 @@ export default function DashboardPage() {
                           </button>
                         )}
 
-                        {/* DOWNLOAD BUTTON (For Buyers) - Uses IPFS/Decrypt logic */}
+                        {/* DOWNLOAD BUTTON (For Buyers) */}
                         {isBought && item.hasKey && (
                            <button 
                              onClick={() => handleDownload(item)}

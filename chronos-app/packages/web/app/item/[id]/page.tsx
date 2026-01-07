@@ -6,14 +6,15 @@ import { useAccount, useWriteContract, useReadContract, useSwitchChain } from "w
 import { formatEther } from "viem";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
-import { MediaPreview } from "@/components/MediaPreview"; // NEW
+import { MediaPreview } from "@/components/MediaPreview"; 
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts"; 
-import { fetchIPFS, getIPFSUrl } from "@/lib/ipfs"; 
-import { decryptFile } from "@/lib/crypto"; // Ensure this exists
+// FIX: Use DataHaven helper
+import { getDataHavenUrl } from "@/lib/datahaven"; 
+import { decryptFile } from "@/lib/crypto"; 
 import { cn } from "@/lib/utils";
 import { 
   ArrowLeft, Download, Shield, User, Globe, Share2, 
-  Check, FileText, Lock, Loader2, RefreshCw 
+  Check, FileText, Lock, Loader2 
 } from "lucide-react";
 
 export default function ItemDetailsPage() {
@@ -27,14 +28,12 @@ export default function ItemDetailsPage() {
   const itemId = BigInt(params?.id as string || "0");
   const targetChainId = Number(searchParams?.get('chain') || "55931");
 
-  // State
   const [meta, setMeta] = useState<any>(null);
   const [isBuying, setIsBuying] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadMsg, setDownloadMsg] = useState("");
   const [copied, setCopied] = useState(false);
 
-  // 1. Fetch Item Data
   const contractAddr = CONTRACT_ADDRESSES[targetChainId];
   const { data: rawItems, isLoading: isItemLoading } = useReadContract({
     address: contractAddr,
@@ -54,52 +53,76 @@ export default function ItemDetailsPage() {
 
   const item = (rawItems as any[])?.find(i => i.id === itemId);
   const isOwner = ownershipData?.[0] === true;
-  const accessKey = ownershipData?.[1]; // The decrypted key if delivered
+  const accessKey = ownershipData?.[1];
 
-  // 2. Fetch Metadata (Description only, MediaPreview handles image)
+  // 2. Fetch Metadata from DataHaven
   useEffect(() => {
     if (!item?.previewCid) return;
+    
     const loadMeta = async () => {
       try {
-        const data = await fetchIPFS(item.previewCid);
-        // If fetch returns Blob (direct file), we don't have extra JSON fields
-        if (!(data instanceof Blob)) {
-          setMeta(data);
+        const url = getDataHavenUrl(item.previewCid);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Failed");
+
+        const contentType = res.headers.get("content-type");
+        
+        if (contentType && contentType.includes("application/json")) {
+           const data = await res.json();
+           setMeta({
+             name: data.name || item.name,
+             description: data.description || "No description provided.",
+             image: data.image ? getDataHavenUrl(data.image) : null,
+             animation_url: data.animation_url ? getDataHavenUrl(data.animation_url) : null
+           });
+        } else {
+           setMeta({ 
+             image: url,
+             description: "No additional description provided.",
+             directPreview: true 
+           });
         }
-      } catch (e) { console.error("Meta error", e); }
+      } catch (e) { 
+        setMeta({ image: getDataHavenUrl(item.previewCid) }); 
+      }
     };
     loadMeta();
   }, [item]);
 
-  // 3. Download Handler
   const handleDownload = async () => {
-    if (!isOwner || !accessKey) return;
+    if (!isOwner || !accessKey) {
+      alert("You must purchase this item and receive the key to download.");
+      return;
+    }
     
     try {
       setIsDownloading(true);
       setDownloadMsg("Fetching...");
       
-      // A. Fetch Encrypted Content
-      const encryptedBlob = await fetchIPFS(item.ipfsCid);
-      
+      // Use DataHaven Proxy
+      const url = getDataHavenUrl(item.ipfsCid);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Fetch failed");
+      const encryptedBlob = await res.blob();
+
       setDownloadMsg("Decrypting...");
-      // B. Decrypt
       const decryptedBlob = await decryptFile(encryptedBlob, accessKey);
       
       setDownloadMsg("Saving...");
-      // C. Save
-      const url = window.URL.createObjectURL(decryptedBlob);
+      const blobUrl = window.URL.createObjectURL(decryptedBlob);
       const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `${item.name.replace(/\s+/g, '_')}_UNLOCKED.${item.fileType.toLowerCase()}`);
+      link.href = blobUrl;
+      const ext = item.fileType ? `.${item.fileType.toLowerCase()}` : '.dat';
+      link.setAttribute('download', `${item.name.replace(/\s+/g, '_')}_UNLOCKED${ext}`);
       document.body.appendChild(link);
       link.click();
       
-      window.URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(blobUrl);
       document.body.removeChild(link);
       
       setDownloadMsg("Done!");
-      setTimeout(() => { setIsDownloading(false); setDownloadMsg(""); }, 1000);
+      setTimeout(() => { setIsDownloading(false); setDownloadMsg(""); }, 2000);
+
     } catch (e: any) {
       alert(`Download Failed: ${e.message}`);
       setIsDownloading(false);
@@ -121,7 +144,7 @@ export default function ItemDetailsPage() {
         args: [itemId],
         value: item.price
       });
-      alert("Purchase Successful! Wait for seller to release key.");
+      alert("Purchase Successful! Wait for key release.");
       router.refresh();
     } catch (e: any) {
       alert("Error: " + (e.reason || e.message));
@@ -135,7 +158,12 @@ export default function ItemDetailsPage() {
   const type = item.fileType.toUpperCase();
   const sold = Number(item.soldCount);
   const max = Number(item.maxSupply);
-  const isSoldOut = item.isSoldOut || sold >= max;
+  const isActive = item.isActive !== undefined ? item.isActive : !item.isSoldOut;
+  const isSoldOut = !isActive || (item.isSoldOut || sold >= max);
+
+  const previewSource = meta?.directPreview 
+    ? getDataHavenUrl(item.previewCid)
+    : (meta?.animation_url || meta?.image || getDataHavenUrl(item.previewCid));
 
   return (
     <div className="min-h-screen bg-[#020e14] text-white font-display flex flex-col">
@@ -146,10 +174,9 @@ export default function ItemDetailsPage() {
         </button>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
-          {/* LEFT: PREVIEW */}
           <div className="space-y-6">
             <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-gray-900 border border-white/10 shadow-2xl">
-               <MediaPreview cid={item.previewCid} type={type} alt={item.name} />
+               <MediaPreview cid={previewSource} type={type} alt={item.name} className="w-full h-full" />
             </div>
 
             <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
@@ -167,7 +194,6 @@ export default function ItemDetailsPage() {
             </div>
           </div>
 
-          {/* RIGHT: DETAILS */}
           <div className="flex flex-col gap-6">
             <div>
               <div className="flex justify-between items-start">
@@ -192,7 +218,7 @@ export default function ItemDetailsPage() {
             <div className="p-6 rounded-xl bg-white/5 border border-white/10">
               <h3 className="text-sm font-bold uppercase text-gray-400 mb-3 flex items-center gap-2"><FileText size={14}/> Artifact Manifest</h3>
               <p className="text-gray-300 leading-relaxed text-sm">
-                {meta?.description || item.description || "No encrypted data description provided by the seller."}
+                {meta?.description || item.description || "No description provided."}
               </p>
             </div>
 
@@ -226,7 +252,7 @@ export default function ItemDetailsPage() {
                     {isDownloading ? <Loader2 className="animate-spin" /> : <Download size={20}/>}
                     {isDownloading ? downloadMsg : accessKey ? "Decrypt & Download" : "Waiting for Key..."}
                   </button>
-                  {!accessKey && <p className="text-xs text-center mt-2 text-gray-500">Payment sent. Waiting for seller to deliver access key.</p>}
+                  {!accessKey && <p className="text-xs text-center mt-2 text-yellow-500 font-mono">* Payment sent. Waiting for seller to release encryption key.</p>}
                 </>
               ) : (
                 <button 

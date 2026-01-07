@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useAccount, useWriteContract, useSignMessage } from "wagmi";
+import { useAccount, useWriteContract, useSignMessage, useWalletClient } from "wagmi";
 import { parseEther } from "viem";
 import { useRouter } from "next/navigation";
 import { Navigation } from "../../components/Navigation";
-import { Footer } from "../../components/Footer"; // Import Footer
+import { Footer } from "../../components/Footer"; 
 import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts"; 
-import { uploadToIPFS } from "../../lib/utils"; 
+// CHANGE: Import DataHaven uploader
+import { uploadToDataHaven } from "../../lib/datahaven"; 
 import { signatureToKey, encryptFile } from "../../lib/crypto";
 import { cn } from "@/lib/utils";
 import { 
@@ -16,7 +17,7 @@ import {
   ShieldCheck, Zap, Sliders, Maximize
 } from "lucide-react";
 
-// (Toast component same as before)
+// --- Toast Component ---
 function Toast({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 5000); return () => clearTimeout(t); }, [onClose]);
   return (
@@ -32,6 +33,8 @@ export default function CreateListingPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const { address, isConnected, chain } = useAccount(); 
+  // CHANGE: Needed for DataHaven Auth
+  const { data: walletClient } = useWalletClient(); 
   const { writeContractAsync } = useWriteContract();
   const { signMessageAsync } = useSignMessage();
   
@@ -68,7 +71,8 @@ export default function CreateListingPage() {
       const file = e.target.files[0];
       setPreviewFile(file);
       setPreviewUrl(URL.createObjectURL(file));
-      setBlurAmount(0); setZoomLevel(100);
+      setBlurAmount(0); 
+      setZoomLevel(100);
 
       if (file.type.startsWith('image/')) setMediaType('IMAGE');
       else if (file.type.startsWith('video/')) setMediaType('VIDEO');
@@ -78,37 +82,53 @@ export default function CreateListingPage() {
   };
 
   const handlePublish = async () => {
-    if (!isConnected || !address || !encryptedFile || !previewFile || !formData.name || !formData.price) {
+    if (!isConnected || !address || !walletClient) {
+      setToast({ message: "Wallet not connected or authorized.", type: 'error' });
+      return;
+    }
+    if (!encryptedFile || !previewFile || !formData.name || !formData.price) {
       setToast({ message: "Please fill all fields and upload files.", type: 'error' });
       return;
     }
 
     try {
+      // 1. Generate Encryption Key
       setStatus('SIGNING_KEY');
       const signature = await signMessageAsync({ message: `CHRONOS_ACCESS:${formData.name.trim()}` });
       const secureKey = signatureToKey(signature);
 
+      // Store locally for the seller to use later (re-delivery)
       const localKeys = JSON.parse(localStorage.getItem('chronos_seller_keys') || '{}');
       localKeys[formData.name.trim()] = secureKey;
       localStorage.setItem('chronos_seller_keys', JSON.stringify(localKeys));
 
+      // 2. Upload to DataHaven
       setStatus('UPLOADING');
-      const encryptedBlob = await encryptFile(encryptedFile, secureKey);
       
-      const [encryptedCid, rawPreviewCid] = await Promise.all([
-        uploadToIPFS(new File([encryptedBlob], encryptedFile.name)),
-        uploadToIPFS(previewFile)
+      // Encrypt main file
+      const encryptedBlob = await encryptFile(encryptedFile, secureKey);
+      const finalEncryptedFile = new File([encryptedBlob], encryptedFile.name);
+
+      // Upload both files (Parallel for speed)
+      // Note: DataHaven returns a File Key, not a CID. Logic remains similar.
+      const [encryptedKey, previewKey] = await Promise.all([
+        uploadToDataHaven(finalEncryptedFile, walletClient, address),
+        uploadToDataHaven(previewFile, walletClient, address)
       ]);
 
+      // Create Metadata JSON
       const metadata = {
         name: formData.name,
         description: formData.description,
-        image: rawPreviewCid,
-        animation_url: (mediaType === 'VIDEO' || mediaType === 'AUDIO') ? rawPreviewCid : undefined,
+        image: previewKey, // This is now a DataHaven File Key
+        animation_url: (mediaType === 'VIDEO' || mediaType === 'AUDIO') ? previewKey : undefined,
         properties: { blur: blurAmount, zoom: zoomLevel }
       };
-      const metadataCid = await uploadToIPFS(JSON.stringify(metadata));
+      
+      const metadataFile = new File([JSON.stringify(metadata)], "metadata.json", { type: "application/json" });
+      const metadataKey = await uploadToDataHaven(metadataFile, walletClient, address);
 
+      // 3. Mint on Blockchain
       setStatus('TX');
       const activeContract = getContractAddress(chain?.id); 
 
@@ -118,8 +138,8 @@ export default function CreateListingPage() {
         functionName: 'listItem',
         args: [
           formData.name.trim(),
-          `ipfs://${encryptedCid}`, 
-          `ipfs://${metadataCid}`,  
+          encryptedKey, // Storing File Key instead of CID
+          metadataKey,  // Storing Metadata Key instead of CID
           formData.fileType,
           parseEther(formData.price),
           BigInt(formData.maxSupply)
@@ -141,15 +161,18 @@ export default function CreateListingPage() {
 
   return (
     <div className="bg-[#020e14] text-white font-display min-h-screen flex flex-col relative overflow-hidden">
+      {/* Background Grid */}
       <div className="fixed inset-0 z-0 pointer-events-none opacity-30 bg-[linear-gradient(rgba(0,224,198,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,224,198,0.03)_1px,transparent_1px)] bg-[size:40px_40px]"></div>
+      
       <Navigation />
+      
       <main className="relative z-10 flex-1 w-full max-w-[1440px] mx-auto px-4 md:px-6 py-8">
         
-        {/* Header */}
+        {/* Header Section */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 border-b border-white/10 pb-6 gap-6">
           <div className="w-full lg:w-auto">
              <div className="flex items-center gap-2 text-xs font-mono text-primary/80 mb-1 tracking-widest uppercase">
-                <span className="material-symbols-outlined text-[14px]">edit_square</span> Listing_Mode :: {viewMode}
+                <Edit3 size={14}/> Listing_Mode :: {viewMode}
              </div>
              <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight font-mono uppercase">
                 Create Listing
@@ -165,11 +188,11 @@ export default function CreateListingPage() {
           </div>
         </div>
 
-        {/* Editor Grid */}
+        {/* Content Grid */}
         {viewMode === 'EDIT' && (
           <div className="flex flex-col lg:grid lg:grid-cols-12 gap-8 animate-in fade-in zoom-in-95 duration-500">
             
-            {/* LEFT COLUMN: Inputs (Takes full width on mobile) */}
+            {/* LEFT COLUMN: Inputs */}
             <div className="lg:col-span-8 space-y-6">
                
                {/* 01. ASSETS */}
@@ -178,7 +201,7 @@ export default function CreateListingPage() {
                      <span className="size-6 rounded bg-primary/20 flex items-center justify-center text-primary text-xs border border-primary/30">01</span> Assets & Intelligence
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                     {/* Encrypted File */}
+                     {/* Encrypted File Input */}
                      <div className={cn("group relative rounded-xl border-2 border-dashed p-6 md:p-8 text-center transition-all cursor-pointer overflow-hidden", encryptedFile ? "border-primary bg-primary/5" : "border-primary/20 hover:border-primary/60 bg-black/20")}>
                         <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><Lock size={24}/></div>
                         <h4 className="text-sm font-bold text-white font-mono uppercase">Encrypted Archive</h4>
@@ -187,7 +210,7 @@ export default function CreateListingPage() {
                         {encryptedFile && <CheckCircle2 className="absolute top-4 right-4 text-primary" size={16}/>}
                      </div>
                      
-                     {/* Preview File */}
+                     {/* Preview File Input */}
                      <div className={cn("group relative rounded-xl border-2 border-dashed p-6 md:p-8 text-center transition-all cursor-pointer overflow-hidden", previewFile ? "border-cyan-400 bg-cyan-400/5" : "border-primary/20 hover:border-cyan-400/60 bg-black/20")}>
                         <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-400">
                            {mediaType === 'VIDEO' ? <Film size={24}/> : mediaType === 'AUDIO' ? <Mic size={24}/> : <ImageIcon size={24}/>}
@@ -230,7 +253,7 @@ export default function CreateListingPage() {
                </div>
             </div>
 
-            {/* RIGHT COLUMN: Preview & Tuner (Stacks below inputs on mobile) */}
+            {/* RIGHT COLUMN: Preview & Tuner */}
             <div className="lg:col-span-4 space-y-6">
                <div className="rounded-xl border border-white/10 bg-[#0b1a24]/60 backdrop-blur-md overflow-hidden shadow-2xl relative">
                   <div className="p-4 border-b border-white/10 bg-black/20 flex justify-between items-center">
@@ -263,10 +286,12 @@ export default function CreateListingPage() {
                                  style={{ filter: `blur(${blurAmount}px)`, transform: `scale(${zoomLevel/100})` }}
                               />
                            )}
+                           
+                           {/* Privacy Overlay if Blurred */}
                            {blurAmount > 5 && (
                               <div className="absolute inset-0 flex items-center justify-center z-20">
-                                 <div className="bg-black/50 backdrop-blur-sm border border-white/20 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white shadow-xl">
-                                    Encrypted Preview
+                                 <div className="bg-black/50 backdrop-blur-sm border border-white/20 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white shadow-xl flex items-center gap-2">
+                                    <Lock size={12}/> Encrypted Preview
                                  </div>
                               </div>
                            )}
@@ -277,15 +302,28 @@ export default function CreateListingPage() {
                   </div>
                </div>
                
+                {/* Visual Tuner */}
                 <div className="rounded-xl border border-white/10 bg-[#0b1a24]/60 p-6 space-y-4">
-                    <h3 className="text-sm font-bold text-white uppercase flex gap-2"><Sliders size={14}/> Holo Tuner</h3>
-                    <input type="range" min="0" max="20" value={blurAmount} onChange={(e) => setBlurAmount(Number(e.target.value))} className="w-full h-2 bg-black/50 rounded-lg accent-primary"/>
+                    <div className="flex justify-between items-center mb-2">
+                       <h3 className="text-sm font-bold text-white uppercase flex gap-2 items-center"><Sliders size={14}/> Holo Tuner</h3>
+                       <span className="text-[10px] text-gray-400 font-mono">ADJUST VISIBILITY</span>
+                    </div>
+                    
+                    <div className="space-y-1">
+                       <div className="flex justify-between text-[10px] text-gray-500 uppercase"><span>Blur</span><span>{blurAmount}px</span></div>
+                       <input type="range" min="0" max="20" value={blurAmount} onChange={(e) => setBlurAmount(Number(e.target.value))} className="w-full h-2 bg-black/50 rounded-lg accent-primary appearance-none cursor-pointer"/>
+                    </div>
+
+                    <div className="space-y-1">
+                       <div className="flex justify-between text-[10px] text-gray-500 uppercase"><span>Zoom</span><span>{zoomLevel}%</span></div>
+                       <input type="range" min="100" max="200" value={zoomLevel} onChange={(e) => setZoomLevel(Number(e.target.value))} className="w-full h-2 bg-black/50 rounded-lg accent-primary appearance-none cursor-pointer"/>
+                    </div>
                 </div>
             </div>
           </div>
         )}
       </main>
-      <Footer /> {/* Render Footer */}
+      <Footer /> 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );

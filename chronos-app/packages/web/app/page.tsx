@@ -2,17 +2,15 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useAccount, useWriteContract, useSwitchChain } from "wagmi";
-// FIX: Added 'parseAbiItem' and 'AbiEvent' to imports
 import { formatEther, createPublicClient, http, parseAbiItem, type AbiEvent } from "viem"; 
 import Link from "next/link";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts"; 
 import { datahaven, arcTestnet } from "@/lib/chains"; 
 import { Navigation } from "../components/Navigation";
 import { Footer } from "../components/Footer";
-import { fetchIPFS, getIPFSUrl } from "@/lib/ipfs"; 
+import { getIPFSUrl } from "@/lib/ipfs"; 
 import { getCryptoPrices } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-// FIX: Added 'ChevronUp' to imports
 import { 
   Search, Video, FileText, Play, Archive, ChevronDown, ChevronUp,
   User, Info, Pause, RefreshCw, Share2, Check, Globe, AlertTriangle, ExternalLink
@@ -59,7 +57,6 @@ function MarketplaceCard({ item }: { item: any }) {
       try {
         const url = getIPFSUrl(item.previewCid);
         if (!url) return;
-
         try {
           const res = await fetch(url);
           const contentType = res.headers.get("content-type");
@@ -84,7 +81,6 @@ function MarketplaceCard({ item }: { item: any }) {
   const max = Number(item.maxSupply);
   const remaining = max - sold;
   
-  // Status Logic
   const isCanceled = !item.isActive; 
   const isSoldOut = !isCanceled && (item.isSoldOut || sold >= max);
   const supplyPercentage = Math.floor((sold / max) * 100);
@@ -108,7 +104,6 @@ function MarketplaceCard({ item }: { item: any }) {
       <Link href={`/item/${item.id}?chain=${item.chainId}`} className="cursor-pointer block">
         <div className={cn("relative aspect-video w-full overflow-hidden bg-gray-900 group-hover:brightness-110 transition-all shrink-0", (isSoldOut || isCanceled) && "grayscale opacity-60")}>
           <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent opacity-80 z-10 pointer-events-none" />
-          
           {meta?.animation_url && type.includes("VIDEO") ? (
             <video ref={videoRef} src={meta.animation_url} className="w-full h-full object-cover" loop muted={!isPlaying} poster={meta?.image}/>
           ) : meta?.image ? (
@@ -253,7 +248,7 @@ export default function MarketplacePage() {
                   }
                 });
               } catch (e) {
-                // console.warn(`Chunk failed on ${chain.name} (${i}-${to}), skipping...`);
+                // Silently continue if a chunk fails
               }
             }
           };

@@ -1,6 +1,5 @@
 /**
  * UPLOADS A FILE TO IPFS (VIA PINATA)
- * Used by: create-listing/page.tsx
  */
 export const uploadToIPFS = async (file: File): Promise<string> => {
   if (!process.env.NEXT_PUBLIC_PINATA_JWT) {
@@ -25,9 +24,7 @@ export const uploadToIPFS = async (file: File): Promise<string> => {
       body: formData
     });
 
-    if (!res.ok) {
-      throw new Error(`Pinata Upload Failed: ${res.statusText}`);
-    }
+    if (!res.ok) throw new Error(`Pinata Upload Failed: ${res.statusText}`);
 
     const data = await res.json();
     return `ipfs://${data.IpfsHash}`;
@@ -50,8 +47,6 @@ const cleanCid = (cid: string) => {
 
 /**
  * HELPER: GENERATE DIRECT GATEWAY URL
- * Used by: Marketplace Card & Item Page for <img src /> tags.
- * PRIORITIZES: Your Dedicated Gateway in .env.local
  */
 export function getIPFSUrl(cid: string | undefined): string | null {
   if (!cid) return null;
@@ -60,77 +55,70 @@ export function getIPFSUrl(cid: string | undefined): string | null {
   // 1. Check for Dedicated Gateway
   const dedicated = process.env.NEXT_PUBLIC_IPFS_GATEWAY;
   if (dedicated) {
-    // Ensure no trailing slash to avoid double //
     return `${dedicated.replace(/\/$/, "")}/ipfs/${clean}`;
   }
 
-  // 2. Fallback to Cloudflare (Fastest public gateway)
+  // 2. Fallback to Cloudflare
   return `https://cloudflare-ipfs.com/ipfs/${clean}`;
 }
 
 /**
  * ROBUST IPFS FETCHER (GATEWAY ROTATION)
- * Used by: dashboard/page.tsx & components/PayLock/Marketplace.tsx
- * Strategy: Tries Dedicated Gateway FIRST, then cycles public ones.
+ * Returns JSON object if metadata, Blob if file.
  */
-export const fetchIPFS = async (cid: string, mimeType?: string): Promise<Blob> => {
+export const fetchIPFS = async (cid: string, mimeType?: string): Promise<Blob | any> => {
   const clean = cleanCid(cid);
-  
-  if (!clean || clean.startsWith("{") || clean.includes("%7B")) {
-    throw new Error("Invalid CID: The file reference appears corrupted.");
-  }
+  if (!clean || clean.startsWith("{")) throw new Error("Invalid CID");
 
-  // 1. Build Priority List
   const dedicated = process.env.NEXT_PUBLIC_IPFS_GATEWAY;
   
   const gateways = [
-    // Priority #1: Dedicated Gateway
     dedicated ? `${dedicated.replace(/\/$/, "")}/ipfs/${clean}` : null,
-    // Priority #2: Reliable Public Gateways
     `https://cloudflare-ipfs.com/ipfs/${clean}`,
     `https://ipfs.io/ipfs/${clean}`,
-    `https://gateway.pinata.cloud/ipfs/${clean}`, // Public Pinata (often rate limited)
-    `https://dweb.link/ipfs/${clean}`
-  ].filter(Boolean) as string[]; // Remove nulls
+    `https://dweb.link/ipfs/${clean}`,
+    `https://gateway.pinata.cloud/ipfs/${clean}`
+  ].filter(Boolean) as string[];
 
-  // 2. Try fetching sequentially
   for (const url of gateways) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       
       const response = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
 
       if (response.ok) {
-        const blob = await response.blob();
+        const contentType = response.headers.get("content-type");
         
-        // Reject HTML error pages disguised as 200 OK
+        // Return JSON if metadata
+        if (contentType && contentType.includes("application/json")) {
+          return await response.json();
+        }
+        
+        // Return Blob if file
+        const blob = await response.blob();
         if (blob.type.includes("text/html") && (!mimeType || !mimeType.includes("html"))) {
            continue; 
         }
-        
-        return blob; // Success!
+        return blob;
       }
-    } catch (e) {
-      // Continue to next gateway on failure
-      continue; 
-    }
+    } catch (e) { continue; }
   }
   
-  throw new Error("All IPFS gateways failed. Network may be busy or CID is invalid.");
+  throw new Error("All IPFS gateways failed.");
 };
 
-/**
- * HELPER: RESOLVE METADATA JSON
- */
 export const resolveMetadata = async (cid: string) => {
   try {
-    const blob = await fetchIPFS(cid);
-    const text = await blob.text();
-    return JSON.parse(text);
+    const data = await fetchIPFS(cid);
+    if (data instanceof Blob) {
+       const text = await data.text();
+       return JSON.parse(text);
+    }
+    return data;
   } catch (e) {
-    console.warn("Failed to resolve metadata for CID:", cid);
+    console.warn("Failed to resolve metadata:", cid);
     return null;
   }
 };

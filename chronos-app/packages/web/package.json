@@ -8,7 +8,12 @@
     "start": "next start"
   },
   "dependencies": {
+    "@polkadot/api": "^16.5.4",
     "@rainbow-me/rainbowkit": "^2.2.10",
+    "@storagehub-sdk/core": "^0.4.0",
+    "@storagehub-sdk/msp-client": "^0.4.0",
+    "@storagehub/api-augment": "^0.2.14",
+    "@storagehub/types-bundle": "^0.2.9",
     "@tanstack/react-query": "^5.90.16",
     "clsx": "^2.1.1",
     "crypto-js": "^4.2.0",
