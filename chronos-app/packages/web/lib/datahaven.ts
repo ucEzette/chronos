@@ -1,7 +1,7 @@
 import { 
   StorageHubClient, 
   initWasm, 
-  FileManager,
+  FileManager, 
   ReplicationLevel 
 } from '@storagehub-sdk/core';
 import { MspClient } from '@storagehub-sdk/msp-client';
@@ -60,7 +60,6 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
   
   // 2. Ensure Bucket Exists
   const bucketName = `user-${address.toLowerCase().slice(2, 8)}`;
-  // FIX: Explicitly cast to Hex String
   const bucketId = (await storageHubClient.deriveBucketId(address, bucketName)) as `0x${string}`;
   
   const bucketQuery = await polkadotApi.query.providers.buckets(bucketId);
@@ -70,7 +69,6 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
     const mspInfo = await mspClient.info.getInfo();
     const valueProps = await mspClient.info.getValuePropositions();
     
-    // FIX: Cast string IDs to `0x${string}`
     const txHash = await storageHubClient.createBucket(
       mspInfo.mspId as `0x${string}`, 
       bucketName, 
@@ -78,8 +76,8 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
       valueProps[0].id as `0x${string}`
     );
     
+    // Increased timeout to 120s to prevent WaitForTransactionReceiptTimeoutError
     if (txHash) {
-      // FIX: Increased timeout to 120s
       await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
     }
   }
@@ -101,25 +99,28 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
     1 
   );
   
+  // Increased timeout to 120s
   if (requestTx) {
     await publicClient.waitForTransactionReceipt({ hash: requestTx, timeout: 120_000 });
   }
 
   // 4. Calculate File Key
   const registry = polkadotApi.registry;
-  // FIX: Double casting to satisfy TypeScript
+  // FIX: Double casting 'unknown' -> Type to solve TS "Codec" errors
   const ownerType = registry.createType('AccountId20', address) as unknown as AccountId20;
   const bucketIdType = registry.createType('H256', bucketId) as unknown as H256;
   
   const fileKey = await fileManager.computeFileKey(ownerType, bucketIdType, file.name);
 
   // 5. Authenticate with MSP (SIWE)
+  // FIX: Use current window location to ensure signature verification passes
   const domain = window.location.hostname;
   const uri = window.location.origin;
   
+  console.log("Authenticating...", { domain });
   const siwe = await mspClient.auth.SIWE(walletClient, domain, uri);
   
-  // FIX: Removed .disconnect() - just connect new instance
+  // FIX: Create NEW client with session (Removed .disconnect() which crashed the app)
   const authMspClient = await MspClient.connect(
     { baseUrl: MSP_URL },
     async () => ({ 
@@ -143,8 +144,19 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
   return fileKey.toHex(); 
 };
 
-// --- URL GENERATOR ---
-export const getDataHavenUrl = (fileKey: string) => {
+// --- SMART URL GENERATOR ---
+// This bridges the gap between old IPFS uploads and new DataHaven uploads
+export const getDataHavenUrl = (fileKey: string | undefined) => {
   if (!fileKey) return "";
-  return `/api/files/${fileKey}`;
+  
+  // Clean prefix
+  const cleanKey = fileKey.replace("ipfs://", "").trim();
+
+  // HYBRID CHECK: If Legacy IPFS (Starts with Qm...), return Public Gateway
+  if (cleanKey.startsWith("Qm")) {
+    return `https://cloudflare-ipfs.com/ipfs/${cleanKey}`;
+  }
+
+  // If DataHaven Key (Hex, starts with 0x...), return Local Proxy
+  return `/api/files/${cleanKey}`;
 };

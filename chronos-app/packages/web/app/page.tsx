@@ -2,21 +2,22 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useAccount, useWriteContract, useSwitchChain } from "wagmi";
-import { formatEther, createPublicClient, http, parseAbiItem, type AbiEvent } from "viem"; 
+import { formatEther, createPublicClient, http, parseAbiItem } from "viem"; 
 import Link from "next/link";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts"; 
 import { datahaven, arcTestnet } from "@/lib/chains"; 
 import { Navigation } from "../components/Navigation";
 import { Footer } from "../components/Footer";
+// Import the new Smart URL helper
 import { getDataHavenUrl } from "@/lib/datahaven"; 
 import { getCryptoPrices } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { 
-  Search, FileText, Play, Archive, ChevronDown, ChevronUp,
-  User, Pause, RefreshCw, Globe
+  Search, Video, FileText, Play, Archive, ChevronDown, ChevronUp,
+  User, Info, Pause, RefreshCw, Share2, Check, Globe, AlertTriangle, ExternalLink
 } from "lucide-react";
 
-// ... [Keep SplashScreen Component as is] ...
+// --- SPLASH SCREEN ---
 function SplashScreen({ onEnter }: { onEnter: () => void }) {
   const [progress, setProgress] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -43,25 +44,29 @@ function SplashScreen({ onEnter }: { onEnter: () => void }) {
   );
 }
 
+// --- MARKETPLACE CARD ---
 function MarketplaceCard({ item }: { item: any }) {
-  // FIX: Initialize with explicit any type
   const [meta, setMeta] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     const loadMetadata = async () => {
       if (!item.previewCid) return;
+      
+      // 1. Get Smart URL (Handles IPFS or DataHaven)
+      const url = getDataHavenUrl(item.previewCid);
+      if (!url) return;
+
       try {
-        const cleanKey = item.previewCid.replace("ipfs://", "");
-        const url = getDataHavenUrl(cleanKey);
-        
-        // Fetch attempt
+        // 2. Fetch the content
         const res = await fetch(url);
         const contentType = res.headers.get("content-type");
         
-        if (contentType && contentType.includes("application/json")) {
+        // 3. If JSON, parse it (Metadata)
+        if (res.ok && contentType && contentType.includes("application/json")) {
           const json = await res.json();
           setMeta({
             ...json,
@@ -69,11 +74,12 @@ function MarketplaceCard({ item }: { item: any }) {
             animation_url: json.animation_url ? getDataHavenUrl(json.animation_url) : null
           });
         } else {
+          // 4. If Blob/Image or Error, treat original URL as the Image
           setMeta({ image: url });
         }
       } catch (e) {
-        // Fallback
-        setMeta({ image: getDataHavenUrl(item.previewCid.replace("ipfs://", "")) });
+        // Fallback for CORS or Network errors -> Show the image directly
+        setMeta({ image: url });
       }
     };
     loadMetadata();
@@ -232,13 +238,13 @@ export default function MarketplacePage() {
               try {
                 const logs = await client.getLogs({
                   address: contractAddr,
-                  event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)') as AbiEvent,
+                  // FIX: Use 'any' type here to fix Vercel build error regarding 'AbiEvent'
+                  event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)') as any,
                   fromBlock: i,
                   toBlock: to
                 });
                 
                 logs.forEach(log => {
-                  // FIX: Explicitly cast 'log' to any
                   const args = (log as any).args;
                   if(args && args.id) {
                     itemBlockMap.set(args.id.toString(), log.blockNumber);
@@ -250,6 +256,7 @@ export default function MarketplacePage() {
           
           await fetchChunks();
 
+          // Fetch Timestamps (rest of logic same)
           const uniqueBlocks = Array.from(new Set(itemBlockMap.values())) as bigint[];
           const blockTimestamps: Record<string, number> = {};
           const recentBlocks = uniqueBlocks.sort().slice(-50); 
@@ -289,6 +296,7 @@ export default function MarketplacePage() {
     return () => clearInterval(intervalId);
   }, []);
 
+  // --- FILTER & SORT LOGIC ---
   const filteredItems = useMemo(() => {
     let items = allItems.filter((item) => {
       const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
@@ -324,7 +332,8 @@ export default function MarketplacePage() {
     <div className="min-h-screen bg-background text-white font-display overflow-x-hidden flex flex-col">
       <Navigation />
       <main className="flex-1 w-full max-w-[1440px] mx-auto px-4 md:px-6 py-8 md:py-12 relative z-10">
-        {/* Toggle Controls */}
+        
+        {/* Mobile Toggle Controls */}
         <div className="md:hidden flex w-full mb-6">
           <div className="flex flex-1 items-center justify-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 w-full">
             <button onClick={() => setView('ACTIVE')} className={cn("flex-1 px-4 py-3 rounded-lg text-xs font-bold transition-all", view === 'ACTIVE' ? "bg-primary text-black shadow-neon" : "text-white/60 hover:text-white")}>Active</button>
@@ -332,7 +341,7 @@ export default function MarketplacePage() {
           </div>
         </div>
 
-        {/* Hero */}
+        {/* Hero Section */}
         <div className="flex flex-col lg:flex-row justify-between items-end gap-6 mb-10 border-b border-white/10 pb-8">
           <div className="space-y-3 w-full lg:w-auto">
             <div className="flex items-center gap-2 text-primary text-[10px] md:text-xs font-mono tracking-widest uppercase animate-pulse"><span className="w-2 h-2 bg-primary rounded-full shadow-neon" /> System Online // V.2.0.77</div>
@@ -362,14 +371,14 @@ export default function MarketplacePage() {
           </div>
         </div>
 
-        {/* Categories */}
+        {/* Filter Categories */}
         <div className="flex flex-nowrap gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
           {["ALL", "AUDIO", "VIDEO", "DATA", "ARCHIVE"].map((f) => (
             <button key={f} onClick={() => setFilter(f)} className={cn("px-5 py-2.5 rounded-xl text-xs font-bold font-mono transition-all border whitespace-nowrap", filter === f ? "bg-primary/20 text-primary border-primary shadow-neon" : "bg-surface text-white/60 border-white/10 hover:border-white/30 hover:text-white")}>{f}</button>
           ))}
         </div>
 
-        {/* Grid */}
+        {/* Item Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 auto-rows-fr pb-20">
           {isLoading && allItems.length === 0 ? (
              <div className="col-span-full py-40 text-center"><RefreshCw className="animate-spin mx-auto text-primary mb-4" size={40}/><p className="text-white/60 font-mono text-sm">Scanning Multi-Chain Ledger...</p></div>
