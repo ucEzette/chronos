@@ -5,8 +5,10 @@ import { useAccount, useDisconnect, useBalance, useSwitchChain } from "wagmi";
 import { useRouter, usePathname } from "next/navigation";
 import { ConnectModal } from "./ConnectModal";
 import { cn } from "@/lib/utils";
-// Removed 'Terminal' from imports as it's no longer needed for the logo
-import { Wallet, LogOut, Menu, X, User, LayoutDashboard, ShoppingCart, Globe, ChevronDown, Check, AlertTriangle } from "lucide-react";
+import { 
+  Wallet, LogOut, Menu, X, User, LayoutDashboard, 
+  ShoppingCart, Globe, ChevronDown, Check, AlertTriangle 
+} from "lucide-react";
 import { arcTestnet, datahaven } from "@/lib/chains"; 
 
 export function Navigation() {
@@ -22,11 +24,18 @@ export function Navigation() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
 
+  // --- FIX: Prevent Infinite Re-renders ---
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
+    const handleScroll = () => {
+      const isScrolled = window.scrollY > 20;
+      // Only update state if it actually changed
+      if (scrolled !== isScrolled) {
+        setScrolled(isScrolled);
+      }
+    };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [scrolled]); // Dependency ensures we check against current state
 
   useEffect(() => { setIsMobileMenuOpen(false); }, [pathname]);
 
@@ -47,7 +56,8 @@ export function Navigation() {
       await switchChainAsync({ chainId: targetChainId });
       setIsNetworkMenuOpen(false);
     } catch (error: any) {
-      if (window.ethereum) {
+      // --- FIX: Vercel Build Error (window.ethereum typing) ---
+      if (typeof window !== "undefined" && (window as any).ethereum) {
         try {
           const targetChain = targetChainId === 5042002 ? arcTestnet : datahaven;
           await (window as any).ethereum.request({
@@ -82,7 +92,7 @@ export function Navigation() {
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12">
           <div className="flex items-center justify-between">
             
-            {/* --- REPLACED BRAND SECTION --- */}
+            {/* BRAND */}
             <div className="flex items-center cursor-pointer group z-50" onClick={() => router.push("/")}>
               <img 
                 src="/chronos-logo.png" 
@@ -90,7 +100,6 @@ export function Navigation() {
                 className="h-10 md:h-14 w-auto object-contain transition-transform group-hover:scale-105" 
               />
             </div>
-            {/* ------------------------------ */}
 
             {/* Desktop Nav */}
             <nav className="hidden lg:flex gap-8 text-xs font-bold uppercase tracking-widest">

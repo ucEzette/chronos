@@ -7,13 +7,15 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { key: string } }
 ) {
-  const fileKey = params.key;
+  let fileKey = params.key;
 
   if (!fileKey) return new NextResponse('Missing Key', { status: 400 });
 
-  // Safety Net: If a legacy IPFS key hits the proxy, redirect immediately
-  if (fileKey.startsWith("Qm")) {
-     return NextResponse.redirect(`https://cloudflare-ipfs.com/ipfs/${fileKey}`);
+  // --- SANITIZATION ---
+  // Ensure we are passing ONLY the Hex Key to the MSP
+  // If the key comes in as "api/files/0x123", strip the prefix.
+  if (fileKey.includes("files/")) {
+    fileKey = fileKey.split("files/").pop() || fileKey;
   }
 
   try {
@@ -28,7 +30,7 @@ export async function GET(
     const headers = new Headers();
     if (result.contentType) headers.set('Content-Type', result.contentType);
     
-    // DISABLE CACHING: Ensures we don't cache 404s while waiting for propagation
+    // Disable caching to prevent 404s from sticking during upload propagation
     headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
 
     // @ts-ignore

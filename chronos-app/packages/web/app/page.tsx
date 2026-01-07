@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useAccount, useWriteContract, useSwitchChain } from "wagmi";
-// FIX: Removed AbiEvent to fix Vercel build
+// FIX: Removed AbiEvent to stop Vercel build errors
 import { formatEther, createPublicClient, http, parseAbiItem } from "viem"; 
 import Link from "next/link";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts"; 
@@ -14,7 +14,7 @@ import { getCryptoPrices } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { 
   Search, Video, FileText, Play, Archive, ChevronDown, 
-  User, Pause, RefreshCw, Globe
+  User, Pause, RefreshCw, Globe, AlertTriangle
 } from "lucide-react";
 
 function SplashScreen({ onEnter }: { onEnter: () => void }) {
@@ -44,7 +44,12 @@ function SplashScreen({ onEnter }: { onEnter: () => void }) {
 }
 
 function MarketplaceCard({ item }: { item: any }) {
-  const [meta, setMeta] = useState<any>(null);
+  const [meta, setMeta] = useState<any>({
+    name: item.name,
+    description: item.description || "Loading...",
+    image: null
+  });
+  
   const [isPlaying, setIsPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -58,9 +63,8 @@ function MarketplaceCard({ item }: { item: any }) {
 
       try {
         const res = await fetch(url);
-        // FIX: Handle 404 or non-JSON responses gracefully
         if (!res.ok) {
-           setMeta({ image: url }); // Assume it's a direct image if fetch fails
+           setMeta({ image: url });
            return;
         }
 
@@ -68,24 +72,22 @@ function MarketplaceCard({ item }: { item: any }) {
         if (contentType && contentType.includes("application/json")) {
           const json = await res.json();
           setMeta({
-            ...json,
-            // Recursively resolve images in metadata
+            name: json.name || item.name,
+            description: json.description || item.description || "No details.",
             image: json.image ? getDataHavenUrl(json.image) : null,
             animation_url: json.animation_url ? getDataHavenUrl(json.animation_url) : null
           });
         } else {
-          // It's a direct image file
           setMeta({ image: url });
         }
       } catch (e) {
-        // Fallback for CORS/Network issues
         setMeta({ image: url });
       }
     };
     loadMetadata();
-  }, [item.previewCid]);
+  }, [item.previewCid, item.description, item.name]);
 
-  const type = item.fileType.toUpperCase();
+  const type = item.fileType ? item.fileType.toUpperCase() : "FILE";
   const sold = Number(item.soldCount);
   const max = Number(item.maxSupply);
   const remaining = max - sold;
@@ -111,10 +113,18 @@ function MarketplaceCard({ item }: { item: any }) {
       <Link href={`/item/${item.id}?chain=${item.chainId}`} className="cursor-pointer block">
         <div className={cn("relative aspect-video w-full overflow-hidden bg-gray-900 group-hover:brightness-110 transition-all shrink-0", (isSoldOut || isCanceled) && "grayscale opacity-60")}>
           <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent opacity-80 z-10 pointer-events-none" />
+          
           {meta?.animation_url && type.includes("VIDEO") ? (
             <video ref={videoRef} src={meta.animation_url} className="w-full h-full object-cover" loop muted={!isPlaying} poster={meta?.image}/>
           ) : meta?.image ? (
-            <img src={meta.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" onError={(e) => (e.target as HTMLImageElement).src = "https://placehold.co/600x400/000/FFF?text=No+Preview"} />
+            <img 
+              src={meta.image} 
+              alt={item.name} 
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = "https://placehold.co/600x400/000/FFF?text=Encrypted+Content";
+              }} 
+            />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-white/5"><FileText size={40} className="text-white/20"/></div>
           )}
@@ -154,7 +164,7 @@ function MarketplaceCard({ item }: { item: any }) {
         
         <div className="bg-white/5 p-2 rounded-lg border border-white/10 min-h-[3.5rem]">
            <p className="text-[10px] text-gray-400 line-clamp-2 leading-relaxed">
-             {meta?.description || item.description || "No description provided."}
+             {meta.description}
            </p>
         </div>
         
@@ -237,7 +247,7 @@ export default function MarketplacePage() {
               try {
                 const logs = await client.getLogs({
                   address: contractAddr,
-                  // FIX: Use 'any' type to avoid Vercel strict build errors
+                  // FIX: Use 'any' type to avoid Vercel strict build errors regarding AbiEvent
                   event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)') as any,
                   fromBlock: i,
                   toBlock: to
@@ -255,6 +265,7 @@ export default function MarketplacePage() {
           
           await fetchChunks();
 
+          // Fetch Timestamps
           const uniqueBlocks = Array.from(new Set(itemBlockMap.values())) as bigint[];
           const blockTimestamps: Record<string, number> = {};
           const recentBlocks = uniqueBlocks.sort().slice(-50); 
