@@ -28,6 +28,7 @@ export default function ItemDetailsPage() {
   const itemId = BigInt(params?.id as string || "0");
   const targetChainId = Number(searchParams?.get('chain') || "55931");
 
+  // FIX: Type meta as 'any' to handle diverse JSON structures
   const [meta, setMeta] = useState<any>(null);
   const [isBuying, setIsBuying] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -55,15 +56,17 @@ export default function ItemDetailsPage() {
   const isOwner = ownershipData?.[0] === true;
   const accessKey = ownershipData?.[1];
 
-  // 2. Fetch Metadata from DataHaven
   useEffect(() => {
     if (!item?.previewCid) return;
     
     const loadMeta = async () => {
       try {
-        const url = getDataHavenUrl(item.previewCid);
+        const cleanKey = item.previewCid.replace("ipfs://", "");
+        // Use DataHaven Proxy
+        const url = getDataHavenUrl(cleanKey);
+        
         const res = await fetch(url);
-        if (!res.ok) throw new Error("Failed");
+        if (!res.ok) throw new Error("Fetch failed");
 
         const contentType = res.headers.get("content-type");
         
@@ -83,7 +86,8 @@ export default function ItemDetailsPage() {
            });
         }
       } catch (e) { 
-        setMeta({ image: getDataHavenUrl(item.previewCid) }); 
+        // Fallback to simple image view
+        setMeta({ image: getDataHavenUrl(item.previewCid.replace("ipfs://", "")) }); 
       }
     };
     loadMeta();
@@ -97,12 +101,13 @@ export default function ItemDetailsPage() {
     
     try {
       setIsDownloading(true);
-      setDownloadMsg("Fetching...");
+      setDownloadMsg("Fetching Encrypted File...");
+      const cleanKey = item.ipfsCid.replace("ipfs://", "");
+      const url = getDataHavenUrl(cleanKey);
       
-      // Use DataHaven Proxy
-      const url = getDataHavenUrl(item.ipfsCid);
       const res = await fetch(url);
-      if (!res.ok) throw new Error("Fetch failed");
+      if (!res.ok) throw new Error(`Fetch failed: ${res.statusText}`);
+      
       const encryptedBlob = await res.blob();
 
       setDownloadMsg("Decrypting...");
@@ -112,6 +117,7 @@ export default function ItemDetailsPage() {
       const blobUrl = window.URL.createObjectURL(decryptedBlob);
       const link = document.createElement('a');
       link.href = blobUrl;
+      
       const ext = item.fileType ? `.${item.fileType.toLowerCase()}` : '.dat';
       link.setAttribute('download', `${item.name.replace(/\s+/g, '_')}_UNLOCKED${ext}`);
       document.body.appendChild(link);
@@ -144,7 +150,7 @@ export default function ItemDetailsPage() {
         args: [itemId],
         value: item.price
       });
-      alert("Purchase Successful! Wait for key release.");
+      alert("Purchase Successful! Wait for seller to release key.");
       router.refresh();
     } catch (e: any) {
       alert("Error: " + (e.reason || e.message));
@@ -162,8 +168,8 @@ export default function ItemDetailsPage() {
   const isSoldOut = !isActive || (item.isSoldOut || sold >= max);
 
   const previewSource = meta?.directPreview 
-    ? getDataHavenUrl(item.previewCid)
-    : (meta?.animation_url || meta?.image || getDataHavenUrl(item.previewCid));
+    ? getDataHavenUrl(item.previewCid.replace("ipfs://", ""))
+    : (meta?.animation_url || meta?.image || getDataHavenUrl(item.previewCid.replace("ipfs://", "")));
 
   return (
     <div className="min-h-screen bg-[#020e14] text-white font-display flex flex-col">
@@ -197,7 +203,7 @@ export default function ItemDetailsPage() {
           <div className="flex flex-col gap-6">
             <div>
               <div className="flex justify-between items-start">
-                <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight leading-none mb-2">{item.name}</h1>
+                <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight leading-none mb-2 break-words">{item.name}</h1>
                 <button onClick={() => { navigator.clipboard.writeText(window.location.href); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
                   {copied ? <Check size={18} className="text-green-500"/> : <Share2 size={18}/>}
                 </button>
@@ -218,7 +224,7 @@ export default function ItemDetailsPage() {
             <div className="p-6 rounded-xl bg-white/5 border border-white/10">
               <h3 className="text-sm font-bold uppercase text-gray-400 mb-3 flex items-center gap-2"><FileText size={14}/> Artifact Manifest</h3>
               <p className="text-gray-300 leading-relaxed text-sm">
-                {meta?.description || item.description || "No description provided."}
+                {meta?.description || item.description || "No encrypted data description provided."}
               </p>
             </div>
 

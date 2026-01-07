@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useAccount, useWriteContract, useSwitchChain } from "wagmi";
+import { useAccount } from "wagmi";
 import { formatEther, createPublicClient, http, parseAbiItem, type AbiEvent } from "viem"; 
 import Link from "next/link";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts"; 
 import { datahaven, arcTestnet } from "@/lib/chains"; 
 import { Navigation } from "../components/Navigation";
 import { Footer } from "../components/Footer";
-import { getIPFSUrl } from "@/lib/ipfs"; 
+import { getDataHavenUrl } from "@/lib/datahaven"; 
 import { getCryptoPrices } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { 
@@ -47,31 +47,48 @@ function SplashScreen({ onEnter }: { onEnter: () => void }) {
 function MarketplaceCard({ item }: { item: any }) {
   const [meta, setMeta] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     const loadMetadata = async () => {
       if (!item.previewCid) return;
+      
+      const cleanKey = item.previewCid.replace("ipfs://", "").trim();
+      const url = getDataHavenUrl(cleanKey);
+      
+      // If URL is empty (e.g., legacy IPFS CID), skip fetching
+      if (!url) {
+        setMeta({ description: "Legacy IPFS Item (Cannot Preview)" });
+        return;
+      }
+
       try {
-        const url = getIPFSUrl(item.previewCid);
-        if (!url) return;
-        try {
-          const res = await fetch(url);
-          const contentType = res.headers.get("content-type");
-          if (contentType && contentType.includes("application/json")) {
-            const json = await res.json();
-            setMeta({
-              ...json,
-              image: getIPFSUrl(json.image),
-              animation_url: getIPFSUrl(json.animation_url)
-            });
-            return;
-          }
-        } catch {}
+        const res = await fetch(url);
+        // If 404, it might be an image, not JSON. Or simply invalid.
+        if (!res.ok) {
+           // Assume it's a direct image file and try to display it
+           setMeta({ image: url });
+           return;
+        }
+
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const json = await res.json();
+          setMeta({
+            ...json,
+            // Recursively resolve images inside the JSON
+            image: json.image ? getDataHavenUrl(json.image) : null,
+            animation_url: json.animation_url ? getDataHavenUrl(json.animation_url) : null
+          });
+        } else {
+          // Direct file
+          setMeta({ image: url });
+        }
+      } catch (e) {
+        console.warn("Failed to load metadata for:", cleanKey);
         setMeta({ image: url });
-      } catch (e) { console.error("Metadata error", e); }
+      }
     };
     loadMetadata();
   }, [item.previewCid]);
@@ -80,14 +97,12 @@ function MarketplaceCard({ item }: { item: any }) {
   const sold = Number(item.soldCount);
   const max = Number(item.maxSupply);
   const remaining = max - sold;
-  
   const isCanceled = !item.isActive; 
   const isSoldOut = !isCanceled && (item.isSoldOut || sold >= max);
   const supplyPercentage = Math.floor((sold / max) * 100);
 
   const togglePlay = (e: React.MouseEvent) => {
-    e.preventDefault(); 
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     if (type.includes("VIDEO") && videoRef.current) { isPlaying ? videoRef.current.pause() : videoRef.current.play(); setIsPlaying(!isPlaying); }
     else if (type.includes("AUDIO") && audioRef.current) { isPlaying ? audioRef.current.pause() : audioRef.current.play(); setIsPlaying(!isPlaying); }
   };
@@ -104,6 +119,7 @@ function MarketplaceCard({ item }: { item: any }) {
       <Link href={`/item/${item.id}?chain=${item.chainId}`} className="cursor-pointer block">
         <div className={cn("relative aspect-video w-full overflow-hidden bg-gray-900 group-hover:brightness-110 transition-all shrink-0", (isSoldOut || isCanceled) && "grayscale opacity-60")}>
           <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent opacity-80 z-10 pointer-events-none" />
+          
           {meta?.animation_url && type.includes("VIDEO") ? (
             <video ref={videoRef} src={meta.animation_url} className="w-full h-full object-cover" loop muted={!isPlaying} poster={meta?.image}/>
           ) : meta?.image ? (
@@ -168,7 +184,7 @@ function MarketplaceCard({ item }: { item: any }) {
   );
 }
 
-// --- MAIN PAGE ---
+// --- MAIN PAGE (Unchanged but using the improved Card) ---
 export default function MarketplacePage() {
   const [mounted, setMounted] = useState(false);
   const [showSplash, setShowSplash] = useState(false);
@@ -207,11 +223,7 @@ export default function MarketplacePage() {
         try {
           const client = createPublicClient({ chain, transport: http() });
           const contractAddr = CONTRACT_ADDRESSES[chain.id];
-          
-          if (!contractAddr || contractAddr === "0x...") {
-             console.warn(`Contract address missing for ${chain.name}`);
-             return;
-          }
+          if (!contractAddr || contractAddr === "0x...") return;
 
           // 1. Fetch Items
           const items = await client.readContract({
@@ -220,7 +232,7 @@ export default function MarketplacePage() {
             functionName: 'getMarketplaceItems',
           }) as any[];
 
-          // 2. Fetch Listing Events (Chunked to prevent RPC 413 Errors)
+          // 2. Fetch Listing Events (Chunked)
           const currentBlock = await client.getBlockNumber();
           const SCAN_DEPTH = BigInt(50000); 
           const CHUNK_SIZE = BigInt(3000);  
@@ -228,7 +240,6 @@ export default function MarketplacePage() {
           
           const itemBlockMap = new Map();
           
-          // Helper to chunk the requests
           const fetchChunks = async () => {
             for (let i = fromBlock; i < currentBlock; i += CHUNK_SIZE) {
               const to = (i + CHUNK_SIZE) > currentBlock ? currentBlock : (i + CHUNK_SIZE);
@@ -241,15 +252,12 @@ export default function MarketplacePage() {
                 });
                 
                 logs.forEach(log => {
-                  // FIX: Explicitly cast 'log' to any to access args.id without TS error
                   const args = (log as any).args;
                   if(args && args.id) {
                     itemBlockMap.set(args.id.toString(), log.blockNumber);
                   }
                 });
-              } catch (e) {
-                // Silently continue if a chunk fails
-              }
+              } catch (e) { /* skip failed chunk */ }
             }
           };
           
@@ -300,11 +308,9 @@ export default function MarketplacePage() {
     let items = allItems.filter((item) => {
       const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
       const matchesFilter = filter === "ALL" || item.fileType.toUpperCase().includes(filter);
-      
       const soldCount = Number(item.soldCount);
       const maxSupply = Number(item.maxSupply);
       const isActive = item.isActive; 
-      
       const isSoldOut = soldCount >= maxSupply || item.isSoldOut;
       const isCanceled = !isActive;
 
@@ -313,9 +319,7 @@ export default function MarketplacePage() {
       else if (view === 'SOLD') matchesView = isActive && isSoldOut;
       else if (view === 'ARCHIVED') matchesView = isCanceled; 
 
-      if (item.isActive === undefined) {
-         matchesView = view === 'ACTIVE' ? !item.isSoldOut : item.isSoldOut;
-      }
+      if (item.isActive === undefined) matchesView = view === 'ACTIVE' ? !item.isSoldOut : item.isSoldOut;
 
       return matchesSearch && matchesFilter && matchesView;
     });

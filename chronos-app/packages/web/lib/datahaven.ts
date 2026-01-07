@@ -38,7 +38,7 @@ export const initDataHaven = async (walletClient: WalletClient) => {
     filesystemContractAddress: FILESYSTEM_CONTRACT,
   });
 
-  // Initial unauthenticated connection
+  // Initial connection
   const mspClient = await MspClient.connect({ baseUrl: MSP_URL });
 
   const provider = new WsProvider(WSS_URL);
@@ -77,7 +77,6 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
       valueProps[0].id as `0x${string}`
     );
     
-    // Increased timeout to 120s
     if (txHash) {
       await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
     }
@@ -100,7 +99,6 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
     1 
   );
   
-  // Increased timeout to 120s
   if (requestTx) {
     await publicClient.waitForTransactionReceipt({ hash: requestTx, timeout: 120_000 });
   }
@@ -111,16 +109,16 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
   const bucketIdType = registry.createType('H256', bucketId) as unknown as H256;
   const fileKey = await fileManager.computeFileKey(ownerType, bucketIdType, file.name);
 
-  // 5. Authenticate with MSP (SIWE)
-  // FIX: Ensure domain matches browser exactly for successful verification
+  // 5. Authenticate (Fix 401 Error)
+  // We strictly use the browser's current location to match the signature
   const domain = window.location.hostname;
   const uri = window.location.origin;
   
-  console.log("Authenticating...", { domain, uri });
+  console.log("Authenticating with MSP...", { domain, uri });
   const siwe = await mspClient.auth.SIWE(walletClient, domain, uri);
   
-  // 6. Connect with Auth Session
-  // We create a NEW client instance with the session provider
+  // 6. Connect Authenticated Client
+  // Create a fresh client instance that includes the token in every request
   const authMspClient = await MspClient.connect(
     { baseUrl: MSP_URL },
     async () => ({ 
@@ -140,7 +138,7 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
   );
 
   if (receipt.status !== 'upload_successful') {
-    throw new Error(`Upload failed: ${receipt.status}`);
+    throw new Error(`MSP Upload failed: ${receipt.status}`);
   }
 
   return fileKey.toHex(); 
@@ -149,5 +147,16 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
 // --- URL GENERATOR ---
 export const getDataHavenUrl = (fileKey: string) => {
   if (!fileKey) return "";
-  return `/api/files/${fileKey}`;
+  
+  // Clean the key (remove prefixes if accidentally passed)
+  const cleanKey = fileKey.replace("ipfs://", "").trim();
+  
+  // If it's an old IPFS CID (starts with Qm...), it won't work on DataHaven.
+  // We return it as is, or you could return a placeholder image.
+  if (cleanKey.startsWith("Qm")) {
+    console.warn("Legacy IPFS CID detected. DataHaven proxy cannot serve this:", cleanKey);
+    return ""; 
+  }
+
+  return `/api/files/${cleanKey}`;
 };
