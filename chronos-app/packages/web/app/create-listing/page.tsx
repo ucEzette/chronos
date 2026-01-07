@@ -5,23 +5,23 @@ import { useAccount, useWriteContract, useSignMessage, useWalletClient } from "w
 import { parseEther } from "viem";
 import { useRouter } from "next/navigation";
 import { Navigation } from "../../components/Navigation";
-import { Footer } from "../../components/Footer"; 
+import { Footer } from "../../components/Footer";
 import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts"; 
-// CHANGE: Import DataHaven uploader
-import { uploadToDataHaven } from "../../lib/datahaven"; 
+// CHANGE: Import authenticateDataHaven helper
+import { uploadToDataHaven, authenticateDataHaven } from "../../lib/datahaven"; 
 import { signatureToKey, encryptFile } from "../../lib/crypto";
 import { cn } from "@/lib/utils";
 import { 
   Loader2, Rocket, Lock, Image as ImageIcon, KeyRound, UploadCloud, 
   CheckCircle2, AlertCircle, X, Eye, Edit3, Film, Mic, AlignLeft, 
-  ShieldCheck, Zap, Sliders, Maximize
+  Zap, Sliders
 } from "lucide-react";
 
 // --- Toast Component ---
 function Toast({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 5000); return () => clearTimeout(t); }, [onClose]);
   return (
-    <div className={cn("fixed bottom-10 right-6 z-[100] flex items-center gap-3 px-6 py-4 rounded-xl border backdrop-blur-xl animate-in slide-in-from-right shadow-2xl", type === 'success' ? "bg-primary/10 border-primary/30 text-primary shadow-glow-primary" : "bg-red-500/10 border-red-500/30 text-red-400")}>
+    <div className={cn("fixed bottom-10 right-6 z-[100] flex items-center gap-3 px-6 py-4 rounded-xl border backdrop-blur-xl animate-in slide-in-from-right shadow-2xl transition-all", type === 'success' ? "bg-primary/10 border-primary/30 text-primary shadow-glow-primary" : "bg-red-500/10 border-red-500/30 text-red-400")}>
       {type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
       <p className="text-sm font-bold font-mono uppercase tracking-wider">{message}</p>
       <button onClick={onClose}><X size={16} /></button>
@@ -33,7 +33,7 @@ export default function CreateListingPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const { address, isConnected, chain } = useAccount(); 
-  // CHANGE: Needed for DataHaven Auth
+  // CHANGE: Needed for DataHaven SIWE Auth
   const { data: walletClient } = useWalletClient(); 
   const { writeContractAsync } = useWriteContract();
   const { signMessageAsync } = useSignMessage();
@@ -82,6 +82,7 @@ export default function CreateListingPage() {
   };
 
   const handlePublish = async () => {
+    // 1. Validation
     if (!isConnected || !address || !walletClient) {
       setToast({ message: "Wallet not connected or authorized.", type: 'error' });
       return;
@@ -92,43 +93,49 @@ export default function CreateListingPage() {
     }
 
     try {
-      // 1. Generate Encryption Key
       setStatus('SIGNING_KEY');
+      
+      // 2. Encryption Key Signature (Chronos Logic)
+      // This key is used to encrypt the file client-side before upload
       const signature = await signMessageAsync({ message: `CHRONOS_ACCESS:${formData.name.trim()}` });
       const secureKey = signatureToKey(signature);
 
-      // Store locally for the seller to use later (re-delivery)
+      // Store key locally for the seller to re-download their own item later
       const localKeys = JSON.parse(localStorage.getItem('chronos_seller_keys') || '{}');
       localKeys[formData.name.trim()] = secureKey;
       localStorage.setItem('chronos_seller_keys', JSON.stringify(localKeys));
 
-      // 2. Upload to DataHaven
+      // 3. DataHaven Session Signature (NEW OPTIMIZATION)
+      // We authenticate ONCE here and reuse the token for all 3 file uploads
+      // This prevents the user from signing 3 separate times
+      const dhSessionToken = await authenticateDataHaven(walletClient, address);
+
       setStatus('UPLOADING');
       
-      // Encrypt main file
+      // 4. Encrypt Main File
       const encryptedBlob = await encryptFile(encryptedFile, secureKey);
       const finalEncryptedFile = new File([encryptedBlob], encryptedFile.name);
 
-      // Upload both files (Parallel for speed)
-      // Note: DataHaven returns a File Key, not a CID. Logic remains similar.
+      // 5. Upload Files to DataHaven (Parallel)
+      // We pass the `dhSessionToken` to skip re-signing
       const [encryptedKey, previewKey] = await Promise.all([
-        uploadToDataHaven(finalEncryptedFile, walletClient, address),
-        uploadToDataHaven(previewFile, walletClient, address)
+        uploadToDataHaven(finalEncryptedFile, walletClient, address, dhSessionToken),
+        uploadToDataHaven(previewFile, walletClient, address, dhSessionToken)
       ]);
 
-      // Create Metadata JSON
+      // 6. Upload Metadata JSON
       const metadata = {
         name: formData.name,
         description: formData.description,
-        image: previewKey, // This is now a DataHaven File Key
+        image: previewKey, // DataHaven Key
         animation_url: (mediaType === 'VIDEO' || mediaType === 'AUDIO') ? previewKey : undefined,
         properties: { blur: blurAmount, zoom: zoomLevel }
       };
       
       const metadataFile = new File([JSON.stringify(metadata)], "metadata.json", { type: "application/json" });
-      const metadataKey = await uploadToDataHaven(metadataFile, walletClient, address);
+      const metadataKey = await uploadToDataHaven(metadataFile, walletClient, address, dhSessionToken);
 
-      // 3. Mint on Blockchain
+      // 7. Mint on Blockchain
       setStatus('TX');
       const activeContract = getContractAddress(chain?.id); 
 
@@ -138,8 +145,8 @@ export default function CreateListingPage() {
         functionName: 'listItem',
         args: [
           formData.name.trim(),
-          encryptedKey, // Storing File Key instead of CID
-          metadataKey,  // Storing Metadata Key instead of CID
+          encryptedKey, // Storing File Key
+          metadataKey,  // Storing Metadata Key
           formData.fileType,
           parseEther(formData.price),
           BigInt(formData.maxSupply)

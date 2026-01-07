@@ -2,22 +2,21 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useAccount, useWriteContract, useSwitchChain } from "wagmi";
+// FIX: Removed AbiEvent to fix Vercel build
 import { formatEther, createPublicClient, http, parseAbiItem } from "viem"; 
 import Link from "next/link";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts"; 
 import { datahaven, arcTestnet } from "@/lib/chains"; 
 import { Navigation } from "../components/Navigation";
 import { Footer } from "../components/Footer";
-// Import the new Smart URL helper
 import { getDataHavenUrl } from "@/lib/datahaven"; 
 import { getCryptoPrices } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { 
-  Search, Video, FileText, Play, Archive, ChevronDown, ChevronUp,
-  User, Info, Pause, RefreshCw, Share2, Check, Globe, AlertTriangle, ExternalLink
+  Search, Video, FileText, Play, Archive, ChevronDown, 
+  User, Pause, RefreshCw, Globe
 } from "lucide-react";
 
-// --- SPLASH SCREEN ---
 function SplashScreen({ onEnter }: { onEnter: () => void }) {
   const [progress, setProgress] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -31,7 +30,7 @@ function SplashScreen({ onEnter }: { onEnter: () => void }) {
     return () => clearInterval(interval);
   }, []);
   return (
-    <div className="fixed inset-0 bg-[#050b14] flex flex-col items-center justify-center relative overflow-hidden z-[100] font-display text-primary select-none px-4">
+    <div className="fixed inset-0 bg-[#050b14] flex flex-col items-center justify-center relative z-[100] font-display text-primary select-none px-4">
       <div className="relative z-10 flex flex-col items-center w-full max-w-sm">
         <h1 className="text-4xl md:text-5xl font-black tracking-[0.2em] mb-4 text-transparent bg-clip-text bg-gradient-to-b from-white to-primary drop-shadow-[0_0_10px_rgba(0,229,255,0.5)] text-center">CHRONOS</h1>
         {!loaded ? (
@@ -44,11 +43,9 @@ function SplashScreen({ onEnter }: { onEnter: () => void }) {
   );
 }
 
-// --- MARKETPLACE CARD ---
 function MarketplaceCard({ item }: { item: any }) {
   const [meta, setMeta] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -56,29 +53,32 @@ function MarketplaceCard({ item }: { item: any }) {
     const loadMetadata = async () => {
       if (!item.previewCid) return;
       
-      // 1. Get Smart URL (Handles IPFS or DataHaven)
       const url = getDataHavenUrl(item.previewCid);
       if (!url) return;
 
       try {
-        // 2. Fetch the content
         const res = await fetch(url);
+        // FIX: Handle 404 or non-JSON responses gracefully
+        if (!res.ok) {
+           setMeta({ image: url }); // Assume it's a direct image if fetch fails
+           return;
+        }
+
         const contentType = res.headers.get("content-type");
-        
-        // 3. If JSON, parse it (Metadata)
-        if (res.ok && contentType && contentType.includes("application/json")) {
+        if (contentType && contentType.includes("application/json")) {
           const json = await res.json();
           setMeta({
             ...json,
+            // Recursively resolve images in metadata
             image: json.image ? getDataHavenUrl(json.image) : null,
             animation_url: json.animation_url ? getDataHavenUrl(json.animation_url) : null
           });
         } else {
-          // 4. If Blob/Image or Error, treat original URL as the Image
+          // It's a direct image file
           setMeta({ image: url });
         }
       } catch (e) {
-        // Fallback for CORS or Network errors -> Show the image directly
+        // Fallback for CORS/Network issues
         setMeta({ image: url });
       }
     };
@@ -89,7 +89,6 @@ function MarketplaceCard({ item }: { item: any }) {
   const sold = Number(item.soldCount);
   const max = Number(item.maxSupply);
   const remaining = max - sold;
-  
   const isCanceled = !item.isActive; 
   const isSoldOut = !isCanceled && (item.isSoldOut || sold >= max);
   const supplyPercentage = Math.floor((sold / max) * 100);
@@ -224,7 +223,7 @@ export default function MarketplacePage() {
             functionName: 'getMarketplaceItems',
           }) as any[];
 
-          // 2. Fetch Listing Events (Chunked)
+          // 2. Fetch Listing Events (Chunked to prevent RPC 413 Errors)
           const currentBlock = await client.getBlockNumber();
           const SCAN_DEPTH = BigInt(50000); 
           const CHUNK_SIZE = BigInt(3000);  
@@ -238,7 +237,7 @@ export default function MarketplacePage() {
               try {
                 const logs = await client.getLogs({
                   address: contractAddr,
-                  // FIX: Use 'any' type here to fix Vercel build error regarding 'AbiEvent'
+                  // FIX: Use 'any' type to avoid Vercel strict build errors
                   event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)') as any,
                   fromBlock: i,
                   toBlock: to
@@ -256,7 +255,6 @@ export default function MarketplacePage() {
           
           await fetchChunks();
 
-          // Fetch Timestamps (rest of logic same)
           const uniqueBlocks = Array.from(new Set(itemBlockMap.values())) as bigint[];
           const blockTimestamps: Record<string, number> = {};
           const recentBlocks = uniqueBlocks.sort().slice(-50); 
@@ -341,7 +339,7 @@ export default function MarketplacePage() {
           </div>
         </div>
 
-        {/* Hero Section */}
+        {/* Hero */}
         <div className="flex flex-col lg:flex-row justify-between items-end gap-6 mb-10 border-b border-white/10 pb-8">
           <div className="space-y-3 w-full lg:w-auto">
             <div className="flex items-center gap-2 text-primary text-[10px] md:text-xs font-mono tracking-widest uppercase animate-pulse"><span className="w-2 h-2 bg-primary rounded-full shadow-neon" /> System Online // V.2.0.77</div>
@@ -371,14 +369,14 @@ export default function MarketplacePage() {
           </div>
         </div>
 
-        {/* Filter Categories */}
+        {/* Categories */}
         <div className="flex flex-nowrap gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
           {["ALL", "AUDIO", "VIDEO", "DATA", "ARCHIVE"].map((f) => (
             <button key={f} onClick={() => setFilter(f)} className={cn("px-5 py-2.5 rounded-xl text-xs font-bold font-mono transition-all border whitespace-nowrap", filter === f ? "bg-primary/20 text-primary border-primary shadow-neon" : "bg-surface text-white/60 border-white/10 hover:border-white/30 hover:text-white")}>{f}</button>
           ))}
         </div>
 
-        {/* Item Grid */}
+        {/* Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 auto-rows-fr pb-20">
           {isLoading && allItems.length === 0 ? (
              <div className="col-span-full py-40 text-center"><RefreshCw className="animate-spin mx-auto text-primary mb-4" size={40}/><p className="text-white/60 font-mono text-sm">Scanning Multi-Chain Ledger...</p></div>

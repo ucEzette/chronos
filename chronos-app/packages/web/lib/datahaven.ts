@@ -39,15 +39,32 @@ export const initDataHaven = async (walletClient: WalletClient) => {
   });
 
   const mspClient = await MspClient.connect({ baseUrl: MSP_URL });
-
   const provider = new WsProvider(WSS_URL);
   const polkadotApi = await ApiPromise.create({ provider, typesBundle: types, noInitWarn: true });
 
   return { storageHubClient, mspClient, polkadotApi, publicClient };
 };
 
+// --- AUTHENTICATION HELPER ---
+export const authenticateDataHaven = async (walletClient: WalletClient, address: string) => {
+  const mspClient = await MspClient.connect({ baseUrl: MSP_URL });
+  
+  // Use 'host' (includes port) to match browser Origin header exactly
+  const domain = window.location.host; 
+  const uri = window.location.origin;
+  
+  console.log("Generating DataHaven Session...", { domain, uri });
+  const siwe = await mspClient.auth.SIWE(walletClient, domain, uri);
+  return siwe.token;
+};
+
 // --- UPLOAD HELPER ---
-export const uploadToDataHaven = async (file: File, walletClient: WalletClient, address: `0x${string}`) => {
+export const uploadToDataHaven = async (
+  file: File, 
+  walletClient: WalletClient, 
+  address: `0x${string}`,
+  authToken?: string
+) => {
   const { storageHubClient, mspClient, polkadotApi, publicClient } = await initDataHaven(walletClient);
 
   // 1. Prepare File
@@ -60,6 +77,7 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
   
   // 2. Ensure Bucket Exists
   const bucketName = `user-${address.toLowerCase().slice(2, 8)}`;
+  // Cast string to Hex String specifically
   const bucketId = (await storageHubClient.deriveBucketId(address, bucketName)) as `0x${string}`;
   
   const bucketQuery = await polkadotApi.query.providers.buckets(bucketId);
@@ -69,6 +87,7 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
     const mspInfo = await mspClient.info.getInfo();
     const valueProps = await mspClient.info.getValuePropositions();
     
+    // Cast IDs to Hex Strings
     const txHash = await storageHubClient.createBucket(
       mspInfo.mspId as `0x${string}`, 
       bucketName, 
@@ -76,10 +95,8 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
       valueProps[0].id as `0x${string}`
     );
     
-    // Increased timeout to 120s to prevent WaitForTransactionReceiptTimeoutError
-    if (txHash) {
-      await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
-    }
+    // 5 Minute Timeout for slow testnet
+    if (txHash) await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 300_000 });
   }
 
   // 3. Issue Storage Request
@@ -87,7 +104,6 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
   const peerIds = mspInfo.multiaddresses.map((addr: string) => addr.split('/p2p/').pop()!).filter(Boolean);
   
   console.log("Issuing storage request...");
-  
   const requestTx = await storageHubClient.issueStorageRequest(
     bucketId,
     file.name,
@@ -99,38 +115,33 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
     1 
   );
   
-  // Increased timeout to 120s
-  if (requestTx) {
-    await publicClient.waitForTransactionReceipt({ hash: requestTx, timeout: 120_000 });
-  }
+  // 5 Minute Timeout
+  if (requestTx) await publicClient.waitForTransactionReceipt({ hash: requestTx, timeout: 300_000 });
 
   // 4. Calculate File Key
   const registry = polkadotApi.registry;
-  // FIX: Double casting 'unknown' -> Type to solve TS "Codec" errors
+  // Double casting to solve 'Codec' type error
   const ownerType = registry.createType('AccountId20', address) as unknown as AccountId20;
   const bucketIdType = registry.createType('H256', bucketId) as unknown as H256;
-  
   const fileKey = await fileManager.computeFileKey(ownerType, bucketIdType, file.name);
 
-  // 5. Authenticate with MSP (SIWE)
-  // FIX: Use current window location to ensure signature verification passes
-  const domain = window.location.hostname;
-  const uri = window.location.origin;
+  // 5. Authenticate
+  let token = authToken;
+  if (!token) {
+    const domain = window.location.host; 
+    const uri = window.location.origin;
+    const siwe = await mspClient.auth.SIWE(walletClient, domain, uri);
+    token = siwe.token;
+  }
   
-  console.log("Authenticating...", { domain });
-  const siwe = await mspClient.auth.SIWE(walletClient, domain, uri);
-  
-  // FIX: Create NEW client with session (Removed .disconnect() which crashed the app)
+  // 6. Connect & Upload
+  // Create NEW instance, do NOT call disconnect()
   const authMspClient = await MspClient.connect(
     { baseUrl: MSP_URL },
-    async () => ({ 
-      token: siwe.token, 
-      user: { address } 
-    })
+    async () => ({ token: token!, user: { address } })
   );
 
-  // 6. Upload
-  console.log("Uploading bytes...");
+  console.log("Uploading bytes to MSP...");
   const receipt = await authMspClient.files.uploadFile(
     bucketId,
     fileKey.toHex(),
@@ -139,24 +150,30 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
     file.name
   );
 
-  if (receipt.status !== 'upload_successful') throw new Error("Upload failed");
+  if (receipt.status !== 'upload_successful') throw new Error(`Upload failed: ${receipt.status}`);
 
   return fileKey.toHex(); 
 };
 
-// --- SMART URL GENERATOR ---
-// This bridges the gap between old IPFS uploads and new DataHaven uploads
-export const getDataHavenUrl = (fileKey: string | undefined) => {
-  if (!fileKey) return "";
+// --- BULLETPROOF URL GENERATOR ---
+export const getDataHavenUrl = (input: string | undefined) => {
+  if (!input) return "";
   
-  // Clean prefix
-  const cleanKey = fileKey.replace("ipfs://", "").trim();
-
-  // HYBRID CHECK: If Legacy IPFS (Starts with Qm...), return Public Gateway
-  if (cleanKey.startsWith("Qm")) {
-    return `https://cloudflare-ipfs.com/ipfs/${cleanKey}`;
+  // 1. Clean accidental double-paths or prefixes from DB
+  let clean = input.replace("ipfs://", "").trim();
+  
+  // SAFETY CHECK: If the key already has the proxy path, strip it to avoid duplication
+  // This specifically fixes the "404 /api/files/api/files/..." error
+  if (clean.includes("/api/files/")) {
+    clean = clean.split("/api/files/").pop() || "";
   }
 
-  // If DataHaven Key (Hex, starts with 0x...), return Local Proxy
-  return `/api/files/${cleanKey}`;
+  // 2. CHECK: Is it a full external URL already?
+  if (clean.startsWith("http")) return clean;
+
+  // 3. CHECK: Legacy IPFS CID (Starts with Qm)
+  if (clean.startsWith("Qm")) return `https://cloudflare-ipfs.com/ipfs/${clean}`;
+
+  // 4. DEFAULT: DataHaven Key (Hex) -> Route to Local Proxy
+  return `/api/files/${clean}`;
 };

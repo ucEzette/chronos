@@ -9,13 +9,9 @@ export async function GET(
 ) {
   const fileKey = params.key;
 
-  if (!fileKey) {
-    return new NextResponse('Missing file key', { status: 400 });
-  }
+  if (!fileKey) return new NextResponse('Missing Key', { status: 400 });
 
-  // --- HYBRID FALLBACK ---
-  // If a Legacy IPFS CID hits this proxy, redirect to Cloudflare IPFS
-  // This solves the 404 errors for items created before the migration
+  // Safety Net: If a legacy IPFS key hits the proxy, redirect immediately
   if (fileKey.startsWith("Qm")) {
      return NextResponse.redirect(`https://cloudflare-ipfs.com/ipfs/${fileKey}`);
   }
@@ -25,19 +21,21 @@ export async function GET(
     const result = await mspClient.files.downloadFile(fileKey);
 
     if (result.status !== 200 || !result.stream) {
-      console.warn(`[Proxy] File not found: ${fileKey}`);
+      console.warn(`[Proxy 404] Key: ${fileKey}`);
       return new NextResponse('File not found', { status: 404 });
     }
 
     const headers = new Headers();
     if (result.contentType) headers.set('Content-Type', result.contentType);
-    headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+    
+    // DISABLE CACHING: Ensures we don't cache 404s while waiting for propagation
+    headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
 
     // @ts-ignore
     return new NextResponse(result.stream, { headers });
 
   } catch (error) {
-    console.error('Proxy Error:', error);
+    console.error('[Proxy Error]', error);
     return new NextResponse('Internal Server Error', { status: 500 });
   }
 }
