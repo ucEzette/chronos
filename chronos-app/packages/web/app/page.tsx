@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useWriteContract, useSwitchChain } from "wagmi";
 import { formatEther, createPublicClient, http, parseAbiItem, type AbiEvent } from "viem"; 
 import Link from "next/link";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts"; 
@@ -12,11 +12,11 @@ import { getDataHavenUrl } from "@/lib/datahaven";
 import { getCryptoPrices } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { 
-  Search, Video, FileText, Play, Archive, ChevronDown, ChevronUp,
-  User, Info, Pause, RefreshCw, Share2, Check, Globe, AlertTriangle, ExternalLink
+  Search, FileText, Play, Archive, ChevronDown, ChevronUp,
+  User, Pause, RefreshCw, Globe
 } from "lucide-react";
 
-// --- SPLASH SCREEN ---
+// ... [Keep SplashScreen Component as is] ...
 function SplashScreen({ onEnter }: { onEnter: () => void }) {
   const [progress, setProgress] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -43,8 +43,8 @@ function SplashScreen({ onEnter }: { onEnter: () => void }) {
   );
 }
 
-// --- MARKETPLACE CARD ---
 function MarketplaceCard({ item }: { item: any }) {
+  // FIX: Initialize with explicit any type
   const [meta, setMeta] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -53,41 +53,27 @@ function MarketplaceCard({ item }: { item: any }) {
   useEffect(() => {
     const loadMetadata = async () => {
       if (!item.previewCid) return;
-      
-      const cleanKey = item.previewCid.replace("ipfs://", "").trim();
-      const url = getDataHavenUrl(cleanKey);
-      
-      // If URL is empty (e.g., legacy IPFS CID), skip fetching
-      if (!url) {
-        setMeta({ description: "Legacy IPFS Item (Cannot Preview)" });
-        return;
-      }
-
       try {
+        const cleanKey = item.previewCid.replace("ipfs://", "");
+        const url = getDataHavenUrl(cleanKey);
+        
+        // Fetch attempt
         const res = await fetch(url);
-        // If 404, it might be an image, not JSON. Or simply invalid.
-        if (!res.ok) {
-           // Assume it's a direct image file and try to display it
-           setMeta({ image: url });
-           return;
-        }
-
         const contentType = res.headers.get("content-type");
+        
         if (contentType && contentType.includes("application/json")) {
           const json = await res.json();
           setMeta({
             ...json,
-            // Recursively resolve images inside the JSON
             image: json.image ? getDataHavenUrl(json.image) : null,
             animation_url: json.animation_url ? getDataHavenUrl(json.animation_url) : null
           });
         } else {
-          // Direct file
           setMeta({ image: url });
         }
       } catch (e) {
-        console.warn("Failed to load metadata for:", cleanKey);
-        setMeta({ image: url });
+        // Fallback
+        setMeta({ image: getDataHavenUrl(item.previewCid.replace("ipfs://", "")) });
       }
     };
     loadMetadata();
@@ -97,6 +83,7 @@ function MarketplaceCard({ item }: { item: any }) {
   const sold = Number(item.soldCount);
   const max = Number(item.maxSupply);
   const remaining = max - sold;
+  
   const isCanceled = !item.isActive; 
   const isSoldOut = !isCanceled && (item.isSoldOut || sold >= max);
   const supplyPercentage = Math.floor((sold / max) * 100);
@@ -119,7 +106,6 @@ function MarketplaceCard({ item }: { item: any }) {
       <Link href={`/item/${item.id}?chain=${item.chainId}`} className="cursor-pointer block">
         <div className={cn("relative aspect-video w-full overflow-hidden bg-gray-900 group-hover:brightness-110 transition-all shrink-0", (isSoldOut || isCanceled) && "grayscale opacity-60")}>
           <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent opacity-80 z-10 pointer-events-none" />
-          
           {meta?.animation_url && type.includes("VIDEO") ? (
             <video ref={videoRef} src={meta.animation_url} className="w-full h-full object-cover" loop muted={!isPlaying} poster={meta?.image}/>
           ) : meta?.image ? (
@@ -184,7 +170,7 @@ function MarketplaceCard({ item }: { item: any }) {
   );
 }
 
-// --- MAIN PAGE (Unchanged but using the improved Card) ---
+// --- MAIN PAGE ---
 export default function MarketplacePage() {
   const [mounted, setMounted] = useState(false);
   const [showSplash, setShowSplash] = useState(false);
@@ -252,6 +238,7 @@ export default function MarketplacePage() {
                 });
                 
                 logs.forEach(log => {
+                  // FIX: Explicitly cast 'log' to any
                   const args = (log as any).args;
                   if(args && args.id) {
                     itemBlockMap.set(args.id.toString(), log.blockNumber);
@@ -263,7 +250,6 @@ export default function MarketplacePage() {
           
           await fetchChunks();
 
-          // Fetch Timestamps
           const uniqueBlocks = Array.from(new Set(itemBlockMap.values())) as bigint[];
           const blockTimestamps: Record<string, number> = {};
           const recentBlocks = uniqueBlocks.sort().slice(-50); 
@@ -303,7 +289,6 @@ export default function MarketplacePage() {
     return () => clearInterval(intervalId);
   }, []);
 
-  // --- FILTER & SORT LOGIC ---
   const filteredItems = useMemo(() => {
     let items = allItems.filter((item) => {
       const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());

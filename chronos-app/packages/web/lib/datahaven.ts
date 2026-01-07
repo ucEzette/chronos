@@ -38,7 +38,6 @@ export const initDataHaven = async (walletClient: WalletClient) => {
     filesystemContractAddress: FILESYSTEM_CONTRACT,
   });
 
-  // Initial connection
   const mspClient = await MspClient.connect({ baseUrl: MSP_URL });
 
   const provider = new WsProvider(WSS_URL);
@@ -61,6 +60,7 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
   
   // 2. Ensure Bucket Exists
   const bucketName = `user-${address.toLowerCase().slice(2, 8)}`;
+  // FIX: Explicitly cast to Hex String
   const bucketId = (await storageHubClient.deriveBucketId(address, bucketName)) as `0x${string}`;
   
   const bucketQuery = await polkadotApi.query.providers.buckets(bucketId);
@@ -70,6 +70,7 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
     const mspInfo = await mspClient.info.getInfo();
     const valueProps = await mspClient.info.getValuePropositions();
     
+    // FIX: Cast string IDs to `0x${string}`
     const txHash = await storageHubClient.createBucket(
       mspInfo.mspId as `0x${string}`, 
       bucketName, 
@@ -78,6 +79,7 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
     );
     
     if (txHash) {
+      // FIX: Increased timeout to 120s
       await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
     }
   }
@@ -105,20 +107,19 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
 
   // 4. Calculate File Key
   const registry = polkadotApi.registry;
+  // FIX: Double casting to satisfy TypeScript
   const ownerType = registry.createType('AccountId20', address) as unknown as AccountId20;
   const bucketIdType = registry.createType('H256', bucketId) as unknown as H256;
+  
   const fileKey = await fileManager.computeFileKey(ownerType, bucketIdType, file.name);
 
-  // 5. Authenticate (Fix 401 Error)
-  // We strictly use the browser's current location to match the signature
+  // 5. Authenticate with MSP (SIWE)
   const domain = window.location.hostname;
   const uri = window.location.origin;
   
-  console.log("Authenticating with MSP...", { domain, uri });
   const siwe = await mspClient.auth.SIWE(walletClient, domain, uri);
   
-  // 6. Connect Authenticated Client
-  // Create a fresh client instance that includes the token in every request
+  // FIX: Removed .disconnect() - just connect new instance
   const authMspClient = await MspClient.connect(
     { baseUrl: MSP_URL },
     async () => ({ 
@@ -127,7 +128,7 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
     })
   );
 
-  // 7. Upload
+  // 6. Upload
   console.log("Uploading bytes...");
   const receipt = await authMspClient.files.uploadFile(
     bucketId,
@@ -137,9 +138,7 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
     file.name
   );
 
-  if (receipt.status !== 'upload_successful') {
-    throw new Error(`MSP Upload failed: ${receipt.status}`);
-  }
+  if (receipt.status !== 'upload_successful') throw new Error("Upload failed");
 
   return fileKey.toHex(); 
 };
@@ -147,16 +146,5 @@ export const uploadToDataHaven = async (file: File, walletClient: WalletClient, 
 // --- URL GENERATOR ---
 export const getDataHavenUrl = (fileKey: string) => {
   if (!fileKey) return "";
-  
-  // Clean the key (remove prefixes if accidentally passed)
-  const cleanKey = fileKey.replace("ipfs://", "").trim();
-  
-  // If it's an old IPFS CID (starts with Qm...), it won't work on DataHaven.
-  // We return it as is, or you could return a placeholder image.
-  if (cleanKey.startsWith("Qm")) {
-    console.warn("Legacy IPFS CID detected. DataHaven proxy cannot serve this:", cleanKey);
-    return ""; 
-  }
-
-  return `/api/files/${cleanKey}`;
+  return `/api/files/${fileKey}`;
 };

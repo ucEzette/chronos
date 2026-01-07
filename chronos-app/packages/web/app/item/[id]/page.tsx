@@ -8,7 +8,6 @@ import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { MediaPreview } from "@/components/MediaPreview"; 
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts"; 
-// FIX: Use DataHaven helper
 import { getDataHavenUrl } from "@/lib/datahaven"; 
 import { decryptFile } from "@/lib/crypto"; 
 import { cn } from "@/lib/utils";
@@ -28,7 +27,7 @@ export default function ItemDetailsPage() {
   const itemId = BigInt(params?.id as string || "0");
   const targetChainId = Number(searchParams?.get('chain') || "55931");
 
-  // FIX: Type meta as 'any' to handle diverse JSON structures
+  // FIX: Type meta as 'any' to fix TS error
   const [meta, setMeta] = useState<any>(null);
   const [isBuying, setIsBuying] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -62,7 +61,6 @@ export default function ItemDetailsPage() {
     const loadMeta = async () => {
       try {
         const cleanKey = item.previewCid.replace("ipfs://", "");
-        // Use DataHaven Proxy
         const url = getDataHavenUrl(cleanKey);
         
         const res = await fetch(url);
@@ -86,7 +84,6 @@ export default function ItemDetailsPage() {
            });
         }
       } catch (e) { 
-        // Fallback to simple image view
         setMeta({ image: getDataHavenUrl(item.previewCid.replace("ipfs://", "")) }); 
       }
     };
@@ -117,7 +114,6 @@ export default function ItemDetailsPage() {
       const blobUrl = window.URL.createObjectURL(decryptedBlob);
       const link = document.createElement('a');
       link.href = blobUrl;
-      
       const ext = item.fileType ? `.${item.fileType.toLowerCase()}` : '.dat';
       link.setAttribute('download', `${item.name.replace(/\s+/g, '_')}_UNLOCKED${ext}`);
       document.body.appendChild(link);
@@ -150,7 +146,7 @@ export default function ItemDetailsPage() {
         args: [itemId],
         value: item.price
       });
-      alert("Purchase Successful! Wait for seller to release key.");
+      alert("Purchase Successful! Wait for key release.");
       router.refresh();
     } catch (e: any) {
       alert("Error: " + (e.reason || e.message));
@@ -203,7 +199,7 @@ export default function ItemDetailsPage() {
           <div className="flex flex-col gap-6">
             <div>
               <div className="flex justify-between items-start">
-                <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight leading-none mb-2 break-words">{item.name}</h1>
+                <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight leading-none mb-2">{item.name}</h1>
                 <button onClick={() => { navigator.clipboard.writeText(window.location.href); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
                   {copied ? <Check size={18} className="text-green-500"/> : <Share2 size={18}/>}
                 </button>
@@ -224,7 +220,7 @@ export default function ItemDetailsPage() {
             <div className="p-6 rounded-xl bg-white/5 border border-white/10">
               <h3 className="text-sm font-bold uppercase text-gray-400 mb-3 flex items-center gap-2"><FileText size={14}/> Artifact Manifest</h3>
               <p className="text-gray-300 leading-relaxed text-sm">
-                {meta?.description || item.description || "No encrypted data description provided."}
+                {meta?.description || item.description || "No description provided."}
               </p>
             </div>
 

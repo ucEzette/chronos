@@ -50,7 +50,7 @@ export function Navigation() {
       if (window.ethereum) {
         try {
           const targetChain = targetChainId === 5042002 ? arcTestnet : datahaven;
-          await window.ethereum.request({
+          await (window as any).ethereum.request({
             method: 'wallet_addEthereumChain',
             params: [{
               chainId: `0x${targetChain.id.toString(16)}`, 
