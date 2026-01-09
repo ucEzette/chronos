@@ -355,7 +355,7 @@ export function Navigation() {
         {/* Mobile Menu Drawer with Animation */}
         <div
           className={cn(
-            "lg:hidden fixed inset-0 top-[73px] z-40 transition-all duration-500 ease-out",
+            "lg:hidden fixed inset-0 z-[60] transition-all duration-500 ease-out",
             isMobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
           )}
         >
@@ -377,6 +377,17 @@ export function Navigation() {
             )}
           >
             <div className="p-6 flex flex-col gap-6 min-h-full">
+              {/* Header with close button */}
+              <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                <span className="text-lg font-bold uppercase tracking-widest text-primary">Menu</span>
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-2 rounded-xl bg-white/5 text-white hover:bg-white/10 transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
               {/* Navigation Links */}
               <nav className="flex flex-col gap-2">
                 {[

@@ -163,23 +163,46 @@ export async function uploadFiles(
  */
 export async function uploadFileViaApi(
     file: File,
-    options: { encrypted?: boolean } = {}
+    options: { encrypted?: boolean; timeoutMs?: number } = {}
 ): Promise<StorageResult> {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (options.encrypted) {
-        formData.append('encrypted', 'true');
+    const timeoutMs = options.timeoutMs || 60000; // 60 second default timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (options.encrypted) {
+            formData.append('encrypted', 'true');
+        }
+
+        const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            let errorMessage = 'Upload failed';
+            try {
+                const error = await response.json();
+                errorMessage = error.error || errorMessage;
+            } catch {
+                errorMessage = `Upload failed with status ${response.status}`;
+            }
+            throw new Error(errorMessage);
+        }
+
+        return response.json();
+    } catch (error: any) {
+        clearTimeout(timeoutId);
+
+        if (error.name === 'AbortError') {
+            throw new Error(`Upload timed out after ${timeoutMs / 1000} seconds. Try a smaller file or check your connection.`);
+        }
+
+        throw error;
     }
-
-    const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-    });
-
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
-    }
-
-    return response.json();
 }

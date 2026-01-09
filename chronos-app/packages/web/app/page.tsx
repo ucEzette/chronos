@@ -14,7 +14,8 @@ import { cn } from "@/lib/utils";
 import {
   Search, Video, FileText, Play, Archive, ChevronDown,
   User, Pause, RefreshCw, Globe, AlertTriangle, Sparkles,
-  TrendingUp, Clock, DollarSign, Package, Filter, X
+  TrendingUp, Clock, DollarSign, Package, Filter, X,
+  Grid, List, SlidersHorizontal
 } from "lucide-react";
 
 // --- Skeleton Card Component ---
@@ -482,6 +483,7 @@ export default function MarketplacePage() {
   const [allItems, setAllItems] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [displayMode, setDisplayMode] = useState<'grid' | 'list'>('grid');
 
   // Prices Ticker
   useEffect(() => {
@@ -770,6 +772,33 @@ export default function MarketplacePage() {
                 </select>
                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" size={16} />
               </div>
+              {/* Display Mode Toggle */}
+              <div className="hidden sm:flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
+                <button
+                  onClick={() => setDisplayMode('grid')}
+                  className={cn(
+                    "p-2 rounded-lg transition-all",
+                    displayMode === 'grid'
+                      ? "bg-primary text-black"
+                      : "text-white/40 hover:text-white hover:bg-white/5"
+                  )}
+                  title="Grid View"
+                >
+                  <Grid size={16} />
+                </button>
+                <button
+                  onClick={() => setDisplayMode('list')}
+                  className={cn(
+                    "p-2 rounded-lg transition-all",
+                    displayMode === 'list'
+                      ? "bg-primary text-black"
+                      : "text-white/40 hover:text-white hover:bg-white/5"
+                  )}
+                  title="List View"
+                >
+                  <List size={16} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -796,8 +825,12 @@ export default function MarketplacePage() {
           </div>
         )}
 
-        {/* Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 auto-rows-fr pb-20">
+        {/* Grid/List View */}
+        <div className={cn(
+          displayMode === 'grid'
+            ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 auto-rows-fr pb-20"
+            : "flex flex-col gap-3 pb-20"
+        )}>
           {isLoading && allItems.length === 0 ? (
             // Skeleton Loading State
             <>
