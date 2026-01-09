@@ -372,11 +372,11 @@ export function Navigation() {
           <div
             ref={mobileMenuRef}
             className={cn(
-              "absolute top-0 right-0 h-full w-full max-w-sm bg-[#020e14]/98 backdrop-blur-xl border-l border-white/10 shadow-2xl transition-transform duration-500 ease-out overflow-y-auto",
+              "absolute top-0 right-0 h-full w-full sm:max-w-sm bg-[#020e14] backdrop-blur-xl border-l border-white/10 shadow-2xl transition-transform duration-500 ease-out overflow-y-auto safe-top",
               isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
             )}
           >
-            <div className="p-6 flex flex-col gap-6 min-h-full">
+            <div className="p-6 pt-8 flex flex-col gap-6 min-h-full">
               {/* Header with close button */}
               <div className="flex items-center justify-between pb-4 border-b border-white/10">
                 <span className="text-lg font-bold uppercase tracking-widest text-primary">Menu</span>
@@ -389,26 +389,44 @@ export function Navigation() {
               </div>
 
               {/* Navigation Links */}
-              <nav className="flex flex-col gap-2">
-                {[
-                  { icon: ShoppingCart, label: "Market", path: "/", exact: true },
-                  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard", exact: false },
-                  { icon: User, label: "Profile", path: "/profile", exact: false, onClick: () => { handleProfileClick(); setIsMobileMenuOpen(false); } }
-                ].map((item, index) => (
-                  <button
-                    key={item.label}
-                    onClick={item.onClick || (() => { router.push(item.path); setIsMobileMenuOpen(false); })}
-                    className={cn(
-                      "flex items-center gap-4 p-4 rounded-2xl border text-sm font-bold uppercase tracking-wide transition-all active:scale-[0.98]",
-                      (item.exact ? pathname === item.path : pathname.startsWith(item.path))
-                        ? "bg-primary/10 border-primary/30 text-primary shadow-[0_0_20px_rgba(0,229,255,0.1)]"
-                        : "bg-white/5 border-white/5 text-gray-300 hover:bg-white/10 hover:border-white/10"
-                    )}
-                    style={{ animationDelay: `${index * 50}ms` }}
-                  >
-                    <item.icon size={20} /> {item.label}
-                  </button>
-                ))}
+              <nav className="flex flex-col gap-3">
+                <Link
+                  href="/"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={cn(
+                    "flex items-center gap-4 p-4 rounded-2xl border text-sm font-bold uppercase tracking-wide transition-all active:scale-[0.98]",
+                    pathname === "/"
+                      ? "bg-primary/10 border-primary/30 text-primary shadow-[0_0_20px_rgba(0,229,255,0.1)]"
+                      : "bg-white/5 border-white/5 text-gray-300 hover:bg-white/10 hover:border-white/10"
+                  )}
+                >
+                  <ShoppingCart size={20} /> Market
+                </Link>
+
+                <Link
+                  href="/dashboard"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={cn(
+                    "flex items-center gap-4 p-4 rounded-2xl border text-sm font-bold uppercase tracking-wide transition-all active:scale-[0.98]",
+                    pathname.startsWith("/dashboard")
+                      ? "bg-primary/10 border-primary/30 text-primary shadow-[0_0_20px_rgba(0,229,255,0.1)]"
+                      : "bg-white/5 border-white/5 text-gray-300 hover:bg-white/10 hover:border-white/10"
+                  )}
+                >
+                  <LayoutDashboard size={20} /> Dashboard
+                </Link>
+
+                <button
+                  onClick={() => { handleProfileClick(); setIsMobileMenuOpen(false); }}
+                  className={cn(
+                    "flex items-center gap-4 p-4 rounded-2xl border text-sm font-bold uppercase tracking-wide transition-all active:scale-[0.98]",
+                    pathname.startsWith("/profile")
+                      ? "bg-primary/10 border-primary/30 text-primary shadow-[0_0_20px_rgba(0,229,255,0.1)]"
+                      : "bg-white/5 border-white/5 text-gray-300 hover:bg-white/10 hover:border-white/10"
+                  )}
+                >
+                  <User size={20} /> Profile
+                </button>
               </nav>
 
               <div className="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
