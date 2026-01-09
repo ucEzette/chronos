@@ -355,137 +355,104 @@ export function Navigation() {
         {/* Mobile Menu Drawer with Animation */}
         <div
           className={cn(
-            "lg:hidden fixed inset-0 z-[60] transition-all duration-500 ease-out",
+            "lg:hidden fixed inset-0 z-[60] transition-all duration-300 ease-out",
             isMobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
           )}
         >
           {/* Backdrop */}
           <div
             className={cn(
-              "absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-500",
+              "absolute inset-0 bg-black/80 transition-opacity duration-300",
               isMobileMenuOpen ? "opacity-100" : "opacity-0"
             )}
             onClick={() => setIsMobileMenuOpen(false)}
           />
 
-          {/* Drawer Panel */}
+          {/* Compact Drawer - Positioned at top */}
           <div
             ref={mobileMenuRef}
             className={cn(
-              "absolute top-0 right-0 h-full w-full sm:max-w-sm bg-[#020e14] backdrop-blur-xl border-l border-white/10 shadow-2xl transition-transform duration-500 ease-out overflow-y-auto safe-top",
-              isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
+              "absolute top-0 left-0 right-0 bg-[#020e14] border-b border-white/10 shadow-2xl transition-transform duration-300 ease-out",
+              isMobileMenuOpen ? "translate-y-0" : "-translate-y-full"
             )}
           >
-            <div className="p-6 pt-8 flex flex-col gap-6 min-h-full">
-              {/* Header with close button */}
-              <div className="flex items-center justify-between pb-4 border-b border-white/10">
-                <span className="text-lg font-bold uppercase tracking-widest text-primary">Menu</span>
+            <div className="p-4 safe-top">
+              {/* Header Row */}
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm font-bold uppercase tracking-widest text-primary">Menu</span>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-2 rounded-xl bg-white/5 text-white hover:bg-white/10 transition-all"
+                  className="p-2 rounded-lg bg-white/5 text-white"
                 >
-                  <X size={20} />
+                  <X size={18} />
                 </button>
               </div>
 
-              {/* Navigation Links */}
-              <nav className="flex flex-col gap-3">
+              {/* Navigation - Horizontal Row */}
+              <div className="flex gap-2 mb-4">
                 <Link
                   href="/"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={cn(
-                    "flex items-center gap-4 p-4 rounded-2xl border text-sm font-bold uppercase tracking-wide transition-all active:scale-[0.98]",
-                    pathname === "/"
-                      ? "bg-primary/10 border-primary/30 text-primary shadow-[0_0_20px_rgba(0,229,255,0.1)]"
-                      : "bg-white/5 border-white/5 text-gray-300 hover:bg-white/10 hover:border-white/10"
+                    "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold uppercase",
+                    pathname === "/" ? "bg-primary text-black" : "bg-white/5 text-white/70"
                   )}
                 >
-                  <ShoppingCart size={20} /> Market
+                  <ShoppingCart size={16} /> Market
                 </Link>
-
                 <Link
                   href="/dashboard"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={cn(
-                    "flex items-center gap-4 p-4 rounded-2xl border text-sm font-bold uppercase tracking-wide transition-all active:scale-[0.98]",
-                    pathname.startsWith("/dashboard")
-                      ? "bg-primary/10 border-primary/30 text-primary shadow-[0_0_20px_rgba(0,229,255,0.1)]"
-                      : "bg-white/5 border-white/5 text-gray-300 hover:bg-white/10 hover:border-white/10"
+                    "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold uppercase",
+                    pathname.startsWith("/dashboard") ? "bg-primary text-black" : "bg-white/5 text-white/70"
                   )}
                 >
-                  <LayoutDashboard size={20} /> Dashboard
+                  <LayoutDashboard size={16} /> Dash
                 </Link>
-
                 <button
                   onClick={() => { handleProfileClick(); setIsMobileMenuOpen(false); }}
                   className={cn(
-                    "flex items-center gap-4 p-4 rounded-2xl border text-sm font-bold uppercase tracking-wide transition-all active:scale-[0.98]",
-                    pathname.startsWith("/profile")
-                      ? "bg-primary/10 border-primary/30 text-primary shadow-[0_0_20px_rgba(0,229,255,0.1)]"
-                      : "bg-white/5 border-white/5 text-gray-300 hover:bg-white/10 hover:border-white/10"
+                    "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold uppercase",
+                    pathname.startsWith("/profile") ? "bg-primary text-black" : "bg-white/5 text-white/70"
                   )}
                 >
-                  <User size={20} /> Profile
+                  <User size={16} /> Profile
                 </button>
-              </nav>
+              </div>
 
-              <div className="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-
+              {/* Connect or Wallet Info */}
               {isConnected ? (
-                <div className="flex flex-col gap-3">
-                  {/* Compact Balance */}
-                  <div className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/10">
-                    <div className="flex items-center gap-2">
-                      <Wallet className="text-primary" size={16} />
-                      <span className="text-xs text-white/60">Balance</span>
-                    </div>
-                    <span className="text-primary font-bold font-mono text-sm">
-                      {balance ? Number(balance.formatted).toFixed(3) : "0.00"} {currencySymbol}
-                    </span>
-                  </div>
-
-                  {/* Compact Network Switcher */}
+                <div className="space-y-3">
+                  {/* Balance + Network Row */}
                   <div className="flex gap-2">
+                    <div className="flex-1 flex items-center gap-2 bg-white/5 px-3 py-2 rounded-lg">
+                      <Wallet className="text-primary" size={14} />
+                      <span className="text-xs text-primary font-mono font-bold">
+                        {balance ? Number(balance.formatted).toFixed(2) : "0.00"} {currencySymbol}
+                      </span>
+                    </div>
                     <button
-                      onClick={() => handleSwitchNetwork(55931)}
-                      className={cn(
-                        "flex-1 py-2.5 px-3 text-[10px] font-bold rounded-xl border text-center transition-all flex items-center justify-center gap-2",
-                        chain?.id === 55931
-                          ? "bg-primary text-black border-primary"
-                          : "bg-white/5 text-white/60 border-white/10"
-                      )}
+                      onClick={() => handleSwitchNetwork(chain?.id === 55931 ? 5042002 : 55931)}
+                      className="px-3 py-2 bg-white/5 rounded-lg text-xs font-bold text-white/70 flex items-center gap-2"
                     >
-                      <span className="size-2 rounded-full bg-cyan-400" />
-                      DataHaven
+                      <span className={cn("size-2 rounded-full", chain?.id === 55931 ? "bg-cyan-400" : "bg-blue-500")} />
+                      {chain?.id === 55931 ? "DH" : "Arc"}
                     </button>
                     <button
-                      onClick={() => handleSwitchNetwork(5042002)}
-                      className={cn(
-                        "flex-1 py-2.5 px-3 text-[10px] font-bold rounded-xl border text-center transition-all flex items-center justify-center gap-2",
-                        chain?.id === 5042002
-                          ? "bg-primary text-black border-primary"
-                          : "bg-white/5 text-white/60 border-white/10"
-                      )}
+                      onClick={handleDisconnect}
+                      className="px-3 py-2 bg-red-500/10 rounded-lg text-red-400"
                     >
-                      <span className="size-2 rounded-full bg-blue-500" />
-                      Arc
+                      <LogOut size={14} />
                     </button>
                   </div>
-
-                  {/* Disconnect Button */}
-                  <button
-                    onClick={handleDisconnect}
-                    className="w-full py-3 bg-red-500/10 text-red-400 rounded-xl font-bold text-xs border border-red-500/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
-                  >
-                    <LogOut size={14} /> Disconnect
-                  </button>
                 </div>
               ) : (
                 <button
                   onClick={() => { setIsConnectOpen(true); setIsMobileMenuOpen(false); }}
-                  className="w-full py-4 bg-primary text-black rounded-xl font-bold text-sm shadow-[0_0_20px_rgba(0,229,255,0.3)] flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                  className="w-full py-3 bg-primary text-black rounded-xl font-bold text-sm flex items-center justify-center gap-2"
                 >
-                  <Wallet size={18} /> Connect Wallet
+                  <Wallet size={16} /> Connect Wallet
                 </button>
               )}
             </div>

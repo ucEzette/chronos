@@ -128,17 +128,40 @@ export default function ItemDetailsPage() {
       setDownloadMsg("Decrypting...");
       const decryptedBlob = await decryptFile(encryptedBlob, accessKey);
 
-      setDownloadMsg("Saving...");
+      setDownloadMsg("Preparing Download...");
+      const ext = item.fileType ? `.${item.fileType.toLowerCase()}` : '.dat';
+      const fileName = `${item.name.replace(/\s+/g, '_')}_UNLOCKED${ext}`;
+
+      // Create blob URL
       const blobUrl = window.URL.createObjectURL(decryptedBlob);
+
+      // Try standard download first
       const link = document.createElement('a');
       link.href = blobUrl;
-      const ext = item.fileType ? `.${item.fileType.toLowerCase()}` : '.dat';
-      link.setAttribute('download', `${item.name.replace(/\s+/g, '_')}_UNLOCKED${ext}`);
+      link.setAttribute('download', fileName);
+      link.style.display = 'none';
       document.body.appendChild(link);
-      link.click();
 
-      window.URL.revokeObjectURL(blobUrl);
-      document.body.removeChild(link);
+      // Check if we're on mobile/iOS
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      if (isMobile) {
+        // For mobile, open in new tab so user can long-press to save
+        setDownloadMsg("Opening file...");
+        window.open(blobUrl, '_blank');
+
+        // Keep URL alive longer for mobile
+        setTimeout(() => {
+          window.URL.revokeObjectURL(blobUrl);
+          document.body.removeChild(link);
+        }, 30000);
+      } else {
+        link.click();
+        setTimeout(() => {
+          window.URL.revokeObjectURL(blobUrl);
+          document.body.removeChild(link);
+        }, 1000);
+      }
 
       setDownloadMsg("Done!");
       setTimeout(() => { setIsDownloading(false); setDownloadMsg(""); }, 2000);
@@ -164,14 +187,14 @@ export default function ItemDetailsPage() {
         args: [itemId],
         value: item.price
       });
-      
+
       // Start auto-refresh polling to detect key delivery
       setWaitingForKey(true);
-      
+
       // Immediate refresh
       await refetchOwnership();
       await refetchItems();
-      
+
     } catch (e: any) {
       alert("Error: " + (e.reason || e.message));
     } finally {
@@ -202,7 +225,32 @@ export default function ItemDetailsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
           <div className="space-y-6">
             <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-gray-900 border border-white/10 shadow-2xl">
-              <MediaPreview cid={previewSource} type={type} alt={item.name} className="w-full h-full" />
+              {/* Direct image/video like marketplace */}
+              {meta?.animation_url && type.includes("VIDEO") ? (
+                <video
+                  src={meta.animation_url}
+                  className="w-full h-full object-cover"
+                  loop
+                  muted
+                  playsInline
+                  controls
+                  poster={meta?.image || undefined}
+                />
+              ) : meta?.image ? (
+                <img
+                  src={meta.image}
+                  alt={item.name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "https://placehold.co/600x600/0b1a24/00E5FF?text=ENCRYPTED";
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-white/5 to-white/10">
+                  <FileText size={48} className="text-white/20 mb-2" />
+                  <span className="text-xs text-white/40">Preview Loading...</span>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">

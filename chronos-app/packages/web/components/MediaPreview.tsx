@@ -18,13 +18,21 @@ export function MediaPreview({ cid, type, alt, className, autoPlay = false }: Me
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     if (!cid) return;
-    const url = getIPFSUrl(cid);
+
+    // Check if cid is already a full URL
+    let url: string | null;
+    if (cid.startsWith('http://') || cid.startsWith('https://') || cid.startsWith('/')) {
+      url = cid; // Already a URL, use directly
+    } else {
+      url = getIPFSUrl(cid);
+    }
+
     if (url) {
       setSrc(url);
       // Images load via onLoad, media loads via onLoadedData
@@ -37,12 +45,12 @@ export function MediaPreview({ cid, type, alt, className, autoPlay = false }: Me
 
   const togglePlay = (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
-    
+
     if (type.includes("VIDEO") && videoRef.current) {
-      if (videoRef.current.paused) { videoRef.current.play(); setIsPlaying(true); } 
+      if (videoRef.current.paused) { videoRef.current.play(); setIsPlaying(true); }
       else { videoRef.current.pause(); setIsPlaying(false); }
     } else if (type.includes("AUDIO") && audioRef.current) {
-      if (audioRef.current.paused) { audioRef.current.play(); setIsPlaying(true); } 
+      if (audioRef.current.paused) { audioRef.current.play(); setIsPlaying(true); }
       else { audioRef.current.pause(); setIsPlaying(false); }
     }
   };
@@ -50,7 +58,7 @@ export function MediaPreview({ cid, type, alt, className, autoPlay = false }: Me
   if (error || !src) {
     return (
       <div className={cn("flex flex-col items-center justify-center bg-white/5 text-white/40 h-full w-full", className)}>
-        <AlertCircle size={32} className="mb-2"/>
+        <AlertCircle size={32} className="mb-2" />
         <span className="text-xs font-mono">Preview Unavailable</span>
       </div>
     );
@@ -69,11 +77,11 @@ export function MediaPreview({ cid, type, alt, className, autoPlay = false }: Me
 
       {/* CONTENT RENDERER */}
       {fileType.includes("VIDEO") ? (
-        <video 
+        <video
           ref={videoRef}
-          src={src} 
-          className="w-full h-full object-cover" 
-          loop 
+          src={src}
+          className="w-full h-full object-cover"
+          loop
           muted={!isPlaying && !autoPlay}
           playsInline
           onLoadedData={() => setLoading(false)}
@@ -83,13 +91,13 @@ export function MediaPreview({ cid, type, alt, className, autoPlay = false }: Me
         <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-black">
           <audio ref={audioRef} src={src} loop onLoadedData={() => setLoading(false)} />
           <div className={cn("p-6 rounded-full bg-white/5 border border-white/10 transition-all", isPlaying && "animate-pulse border-primary/50 shadow-neon")}>
-             <Music size={48} className={cn("text-gray-400", isPlaying && "text-primary")} />
+            <Music size={48} className={cn("text-gray-400", isPlaying && "text-primary")} />
           </div>
         </div>
       ) : (
-        <img 
-          src={src} 
-          alt={alt} 
+        <img
+          src={src}
+          alt={alt}
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
           onLoad={() => setLoading(false)}
           onError={() => { setError(true); setLoading(false); }}
@@ -100,7 +108,7 @@ export function MediaPreview({ cid, type, alt, className, autoPlay = false }: Me
       {(fileType.includes("VIDEO") || fileType.includes("AUDIO")) && !loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all z-20 cursor-pointer" onClick={togglePlay}>
           <button className={cn("bg-primary/90 text-black p-4 rounded-full shadow-neon transform transition-all duration-300 active:scale-95", isPlaying ? "opacity-0 group-hover:opacity-100 scale-90" : "opacity-100 scale-100")}>
-            {isPlaying ? <Pause size={24} fill="currentColor"/> : <Play size={24} fill="currentColor"/>}
+            {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
           </button>
         </div>
       )}
