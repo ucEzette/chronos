@@ -202,7 +202,25 @@ export function Navigation() {
             </nav>
 
             {/* Wallet Section */}
-            <div className="flex items-center gap-3 md:gap-4">
+            <div className="flex items-center gap-2 md:gap-4">
+              {/* Mobile: Simple Connect/Connected indicator */}
+              <div className="flex md:hidden items-center gap-2">
+                {isConnected ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-full">
+                    <span className="size-2 rounded-full bg-primary animate-pulse" />
+                    <span className="text-[10px] font-mono font-bold text-primary">{address?.slice(0, 4)}...{address?.slice(-3)}</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setIsConnectOpen(true)}
+                    className="bg-primary text-black px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(0,229,255,0.3)] transition-all active:scale-95 flex items-center gap-1.5"
+                  >
+                    <Wallet size={12} /> Connect
+                  </button>
+                )}
+              </div>
+
+              {/* Desktop: Full wallet controls */}
               <div className="hidden md:flex items-center gap-4">
                 {isConnected ? (
                   <div className="flex items-center gap-3">
