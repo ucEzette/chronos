@@ -686,6 +686,32 @@ export default function MarketplacePage() {
           </div>
 
           <div className="flex flex-col w-full lg:w-auto gap-4">
+            {/* Mobile View Toggle */}
+            <div className="flex md:hidden items-center justify-center gap-1 bg-white/5 p-1 rounded-full border border-white/10">
+              <button
+                onClick={() => setView('ACTIVE')}
+                className={cn(
+                  "flex-1 px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                  view === 'ACTIVE'
+                    ? "bg-primary text-black shadow-[0_0_15px_rgba(0,229,255,0.3)]"
+                    : "text-white/60"
+                )}
+              >
+                <TrendingUp size={12} /> Active
+              </button>
+              <button
+                onClick={() => setView('SOLD')}
+                className={cn(
+                  "flex-1 px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                  view === 'SOLD'
+                    ? "bg-white/20 text-white shadow-lg"
+                    : "text-white/60"
+                )}
+              >
+                <Package size={12} /> Sold
+              </button>
+            </div>
+
             {/* Desktop View Toggle */}
             <div className="hidden md:flex items-center justify-end gap-1 bg-white/5 p-1.5 rounded-full border border-white/10">
               <button
