@@ -11,6 +11,7 @@ import {
   ShoppingCart, Globe, ChevronDown, Check, AlertTriangle
 } from "lucide-react";
 import { arcTestnet, datahaven } from "@/lib/chains";
+import { CartButton } from "./CartDrawer";
 
 export function Navigation() {
   const { address, isConnected, chain } = useAccount();
@@ -307,6 +308,9 @@ export function Navigation() {
                     </div>
 
                     {/* Disconnect Button */}
+                    {/* Cart Button */}
+                    <CartButton />
+
                     <button
                       onClick={handleDisconnect}
                       className="size-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 hover:bg-red-500/20 hover:border-red-500/40 hover:scale-105 active:scale-95 transition-all"

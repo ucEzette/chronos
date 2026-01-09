@@ -10,6 +10,7 @@ import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts";
 import { uploadFileViaApi } from "../../lib/storage";
 import { signatureToKey, encryptFile } from "../../lib/crypto";
 import { cn } from "@/lib/utils";
+import { CATEGORIES, getSubcategories, type Category } from "@/lib/categories";
 import {
    Loader2, Rocket, Lock, Image as ImageIcon, KeyRound, UploadCloud,
    CheckCircle2, AlertCircle, X, Eye, Edit3, Film, Mic, AlignLeft,
@@ -345,7 +346,9 @@ export default function CreateListingPage() {
       description: "",
       price: "",
       maxSupply: "1",
-      fileType: ".DATA"
+      fileType: ".DATA",
+      category: "",
+      tags: [] as string[]
    });
    const [encryptedFile, setEncryptedFile] = useState<File | null>(null);
    const [previewFile, setPreviewFile] = useState<File | null>(null);
@@ -394,7 +397,7 @@ export default function CreateListingPage() {
       }
    }, [previewUrl]);
 
-   const handleInputChange = useCallback((field: string, value: string) => {
+   const handleInputChange = useCallback((field: string, value: string | string[]) => {
       setFormData(prev => ({ ...prev, [field]: value }));
    }, []);
 
@@ -447,6 +450,9 @@ export default function CreateListingPage() {
                blur: blurAmount,
                zoom: zoomLevel,
                fileType: formData.fileType,
+               fileSize: encryptedFile?.size || 0,
+               category: formData.category,
+               tags: formData.tags,
                storageProvider: encryptedResult.provider
             }
          };
@@ -664,6 +670,57 @@ export default function CreateListingPage() {
                               value={formData.description}
                               onChange={e => handleInputChange('description', e.target.value)}
                            />
+                        </div>
+
+                        {/* Category & Tags */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           {/* Category Dropdown */}
+                           <div className="space-y-2">
+                              <label className="text-xs font-mono text-primary/80 uppercase tracking-wide flex items-center gap-2">
+                                 <Package size={12} /> Category
+                              </label>
+                              <select
+                                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3.5 text-white focus:border-primary focus:ring-1 focus:ring-primary/50 outline-none font-mono transition-all cursor-pointer appearance-none"
+                                 value={formData.category}
+                                 onChange={e => handleInputChange('category', e.target.value)}
+                              >
+                                 <option value="">Select Category</option>
+                                 {CATEGORIES.map(cat => (
+                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                 ))}
+                              </select>
+                           </div>
+
+                           {/* Subcategory/Tags */}
+                           {formData.category && (
+                              <div className="space-y-2">
+                                 <label className="text-xs font-mono text-primary/80 uppercase tracking-wide flex items-center gap-2">
+                                    <Hash size={12} /> Tags
+                                 </label>
+                                 <div className="flex flex-wrap gap-1.5 p-2 bg-black/40 border border-white/10 rounded-xl min-h-[3rem]">
+                                    {getSubcategories(formData.category).map(tag => (
+                                       <button
+                                          key={tag}
+                                          type="button"
+                                          onClick={() => {
+                                             const newTags = formData.tags.includes(tag)
+                                                ? formData.tags.filter(t => t !== tag)
+                                                : [...formData.tags, tag];
+                                             handleInputChange('tags', newTags);
+                                          }}
+                                          className={cn(
+                                             "px-2 py-1 text-[10px] font-bold rounded-lg transition-all",
+                                             formData.tags.includes(tag)
+                                                ? "bg-primary text-black"
+                                                : "bg-white/5 text-white/60 hover:bg-white/10"
+                                          )}
+                                       >
+                                          {tag}
+                                       </button>
+                                    ))}
+                                 </div>
+                              </div>
+                           )}
                         </div>
                      </div>
                   </div>

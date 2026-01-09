@@ -11,6 +11,7 @@ import { Footer } from "../components/Footer";
 import { getDataHavenUrl } from "@/lib/datahaven";
 import { getCryptoPrices } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { CATEGORIES, getCategoryById } from "@/lib/categories";
 import {
   Search, Video, FileText, Play, Archive, ChevronDown,
   User, Pause, RefreshCw, Globe, AlertTriangle, Sparkles,
@@ -115,7 +116,7 @@ interface MetaState {
 }
 
 // --- Marketplace Card Component (Memoized for performance) ---
-const MarketplaceCard = memo(function MarketplaceCard({ item }: { item: any }) {
+const MarketplaceCard = memo(function MarketplaceCard({ item, viewMode = 'grid' }: { item: any; viewMode?: 'grid' | 'list' }) {
   const [meta, setMeta] = useState<MetaState>({
     name: item.name,
     description: "Loading...",
@@ -290,6 +291,61 @@ const MarketplaceCard = memo(function MarketplaceCard({ item }: { item: any }) {
     }
   }, [type, isPlaying]);
 
+  // --- LIST VIEW ---
+  if (viewMode === 'list') {
+    return (
+      <Link
+        href={`/item/${item.id}?chain=${item.chainId}`}
+        className={cn(
+          "group flex items-center gap-4 p-3 bg-[#0b1a24]/60 backdrop-blur-md border border-white/10 rounded-xl hover:border-primary/50 transition-all",
+          (isSoldOut || isCanceled) && "opacity-60"
+        )}
+      >
+        {/* Thumbnail */}
+        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-gray-900 shrink-0">
+          {meta?.image ? (
+            <img src={meta.image} alt={item.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-white/5">
+              <FileText size={20} className="text-white/20" />
+            </div>
+          )}
+        </div>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="font-bold text-white truncate">{item.name}</h3>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-bold shrink-0">
+              {type.replace('.', '')}
+            </span>
+          </div>
+          <p className="text-xs text-white/40 truncate">{meta.description}</p>
+          <div className="flex items-center gap-3 mt-1 text-[10px] text-white/40">
+            <span>{item.chainId === 55931 ? "DH" : "ARC"}</span>
+            <span>•</span>
+            <span>{sold}/{max} sold</span>
+          </div>
+        </div>
+
+        {/* Price & Action */}
+        <div className="shrink-0 text-right">
+          <div className="text-lg font-bold text-white font-mono">
+            {formatEther(item.price)}
+            <span className="text-xs text-primary/60 ml-1">{item.currency}</span>
+          </div>
+          <span className={cn(
+            "text-[10px] font-bold uppercase",
+            isSoldOut ? "text-red-400" : isCanceled ? "text-gray-500" : "text-green-400"
+          )}>
+            {isCanceled ? "Archived" : isSoldOut ? "Sold Out" : "Active"}
+          </span>
+        </div>
+      </Link>
+    );
+  }
+
+  // --- GRID VIEW ---
   return (
     <div className="group relative bg-[#0b1a24]/60 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden hover:border-primary/50 transition-all duration-500 hover:shadow-[0_0_40px_rgba(0,229,255,0.15)] hover:-translate-y-1 flex flex-col h-full">
       {/* Badges */}
@@ -484,6 +540,8 @@ export default function MarketplacePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [displayMode, setDisplayMode] = useState<'grid' | 'list'>('grid');
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   // Prices Ticker
   useEffect(() => {
@@ -600,6 +658,7 @@ export default function MarketplacePage() {
     let items = allItems.filter((item) => {
       const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
       const matchesFilter = filter === "ALL" || (item.fileType && item.fileType.toUpperCase().includes(filter));
+      const matchesCategory = categoryFilter === "ALL" || (item.category === categoryFilter);
       const soldCount = Number(item.soldCount);
       const maxSupply = Number(item.maxSupply);
       const isActive = item.isActive;
@@ -614,16 +673,17 @@ export default function MarketplacePage() {
       // Fallback for contracts that don't have isActive field
       if (item.isActive === undefined) matchesView = view === 'ACTIVE' ? !item.isSoldOut : item.isSoldOut;
 
-      return matchesSearch && matchesFilter && matchesView;
+      return matchesSearch && matchesFilter && matchesCategory && matchesView;
     });
 
     const sorted = [...items];
     if (sort === "NEWEST") sorted.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    else if (sort === "OLDEST") sorted.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     else if (sort === "PRICE_LOW") sorted.sort((a, b) => Number(a.price) - Number(b.price));
     else if (sort === "PRICE_HIGH") sorted.sort((a, b) => Number(b.price) - Number(a.price));
 
     return sorted;
-  }, [allItems, filter, search, sort, view]);
+  }, [allItems, filter, search, sort, view, categoryFilter]);
 
   const handleClearSearch = useCallback(() => setSearch(""), []);
 
@@ -641,34 +701,6 @@ export default function MarketplacePage() {
       <Navigation />
 
       <main className="flex-1 w-full max-w-[1440px] mx-auto px-4 md:px-6 py-8 md:py-12 relative z-10">
-
-        {/* Mobile Toggle Controls */}
-        <div className="md:hidden flex w-full mb-6">
-          <div className="flex flex-1 items-center justify-center gap-1 bg-white/5 p-1.5 rounded-2xl border border-white/10 w-full">
-            <button
-              onClick={() => setView('ACTIVE')}
-              className={cn(
-                "flex-1 px-4 py-3 rounded-xl text-xs font-bold transition-all",
-                view === 'ACTIVE'
-                  ? "bg-primary text-black shadow-[0_0_20px_rgba(0,229,255,0.3)]"
-                  : "text-white/60 hover:text-white"
-              )}
-            >
-              Active
-            </button>
-            <button
-              onClick={() => setView('SOLD')}
-              className={cn(
-                "flex-1 px-4 py-3 rounded-xl text-xs font-bold transition-all",
-                view === 'SOLD'
-                  ? "bg-white/20 text-white shadow-lg"
-                  : "text-white/60 hover:text-white"
-              )}
-            >
-              Sold
-            </button>
-          </div>
-        </div>
 
         {/* Hero */}
         <div className="flex flex-col lg:flex-row justify-between items-end gap-6 mb-10 border-b border-white/10 pb-8">
@@ -688,30 +720,53 @@ export default function MarketplacePage() {
           </div>
 
           <div className="flex flex-col w-full lg:w-auto gap-4">
-            {/* Mobile View Toggle */}
-            <div className="flex md:hidden items-center justify-center gap-1 bg-white/5 p-1 rounded-full border border-white/10">
-              <button
-                onClick={() => setView('ACTIVE')}
-                className={cn(
-                  "flex-1 px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5",
-                  view === 'ACTIVE'
-                    ? "bg-primary text-black shadow-[0_0_15px_rgba(0,229,255,0.3)]"
-                    : "text-white/60"
-                )}
-              >
-                <TrendingUp size={12} /> Active
-              </button>
-              <button
-                onClick={() => setView('SOLD')}
-                className={cn(
-                  "flex-1 px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5",
-                  view === 'SOLD'
-                    ? "bg-white/20 text-white shadow-lg"
-                    : "text-white/60"
-                )}
-              >
-                <Package size={12} /> Sold
-              </button>
+            {/* Mobile View Toggle + Display Mode */}
+            <div className="flex md:hidden items-center gap-2 w-full">
+              <div className="flex flex-1 items-center justify-center gap-1 bg-white/5 p-1 rounded-full border border-white/10">
+                <button
+                  onClick={() => setView('ACTIVE')}
+                  className={cn(
+                    "flex-1 px-3 py-2 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1",
+                    view === 'ACTIVE'
+                      ? "bg-primary text-black"
+                      : "text-white/60"
+                  )}
+                >
+                  <TrendingUp size={12} /> Active
+                </button>
+                <button
+                  onClick={() => setView('SOLD')}
+                  className={cn(
+                    "flex-1 px-3 py-2 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1",
+                    view === 'SOLD'
+                      ? "bg-white/20 text-white"
+                      : "text-white/60"
+                  )}
+                >
+                  <Package size={12} /> Sold
+                </button>
+              </div>
+              {/* Mobile Grid/List Toggle */}
+              <div className="flex items-center gap-1 bg-white/5 p-1 rounded-full border border-white/10">
+                <button
+                  onClick={() => setDisplayMode('grid')}
+                  className={cn(
+                    "p-2 rounded-full transition-all",
+                    displayMode === 'grid' ? "bg-primary text-black" : "text-white/40"
+                  )}
+                >
+                  <Grid size={14} />
+                </button>
+                <button
+                  onClick={() => setDisplayMode('list')}
+                  className={cn(
+                    "p-2 rounded-full transition-all",
+                    displayMode === 'list' ? "bg-primary text-black" : "text-white/40"
+                  )}
+                >
+                  <List size={14} />
+                </button>
+              </div>
             </div>
 
             {/* Desktop View Toggle */}
@@ -767,6 +822,7 @@ export default function MarketplacePage() {
                   className="appearance-none w-full sm:w-48 bg-surface border border-white/10 rounded-xl py-3 pl-4 pr-10 text-sm text-white focus:outline-none focus:border-primary/50 cursor-pointer transition-all"
                 >
                   <option value="NEWEST">Newest First</option>
+                  <option value="OLDEST">Oldest First</option>
                   <option value="PRICE_LOW">Price: Low to High</option>
                   <option value="PRICE_HIGH">Price: High to Low</option>
                 </select>
@@ -803,16 +859,45 @@ export default function MarketplacePage() {
           </div>
         </div>
 
-        {/* Category Filters */}
-        <div className="flex flex-nowrap gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
-          {["ALL", "AUDIO", "VIDEO", "DATA", "ARCHIVE"].map((f) => (
-            <FilterPill
-              key={f}
-              label={f}
-              isActive={filter === f}
-              onClick={() => setFilter(f)}
-            />
-          ))}
+        {/* Category Filter Bar */}
+        <div className="flex flex-wrap gap-2 mb-8">
+          <button
+            onClick={() => setCategoryFilter('ALL')}
+            className={cn(
+              "px-4 py-2 rounded-xl text-xs font-bold transition-all border whitespace-nowrap",
+              categoryFilter === 'ALL'
+                ? "bg-primary/20 text-primary border-primary"
+                : "bg-surface text-white/60 border-white/10 hover:border-white/30"
+            )}
+          >
+            All Categories
+          </button>
+          {(showAllCategories ? CATEGORIES : CATEGORIES.slice(0, 6)).map((cat) => {
+            const Icon = cat.icon;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setCategoryFilter(cat.id)}
+                className={cn(
+                  "px-3 py-2 rounded-xl text-xs font-bold transition-all border whitespace-nowrap flex items-center gap-1.5",
+                  categoryFilter === cat.id
+                    ? "bg-primary/20 text-primary border-primary"
+                    : "bg-surface text-white/60 border-white/10 hover:border-white/30"
+                )}
+              >
+                <Icon size={12} /> {cat.name}
+              </button>
+            );
+          })}
+          {CATEGORIES.length > 6 && (
+            <button
+              onClick={() => setShowAllCategories(!showAllCategories)}
+              className="px-3 py-2 rounded-xl text-xs font-bold transition-all border whitespace-nowrap flex items-center gap-1.5 bg-white/5 text-white/60 border-white/10 hover:border-primary/50 hover:text-primary"
+            >
+              <ChevronDown size={12} className={cn("transition-transform", showAllCategories && "rotate-180")} />
+              {showAllCategories ? 'Show Less' : `+${CATEGORIES.length - 6} More`}
+            </button>
+          )}
         </div>
 
         {/* Results Count */}
@@ -840,7 +925,7 @@ export default function MarketplacePage() {
             </>
           ) : filteredItems.length > 0 ? (
             filteredItems.map((item, i) => (
-              <MarketplaceCard key={`${item.chainId}-${item.id}-${i}`} item={item} />
+              <MarketplaceCard key={`${item.chainId}-${item.id}-${i}`} item={item} viewMode={displayMode} />
             ))
           ) : (
             // Empty State

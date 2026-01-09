@@ -13,8 +13,13 @@ import { decryptFile } from "@/lib/crypto";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft, Download, Shield, User, Globe, Share2,
-  Check, FileText, Lock, Loader2, RefreshCw
+  Check, FileText, Lock, Loader2, RefreshCw, ShoppingCart, Plus, Minus
 } from "lucide-react";
+import { useCart } from "@/components/CartContext";
+import { ReviewForm } from "@/components/ReviewForm";
+import { ReviewList } from "@/components/ReviewList";
+import { StarRating } from "@/components/StarRating";
+import { getItemAverageRating } from "@/lib/reviews";
 
 export default function ItemDetailsPage() {
   const params = useParams();
@@ -34,6 +39,9 @@ export default function ItemDetailsPage() {
   const [downloadMsg, setDownloadMsg] = useState("");
   const [copied, setCopied] = useState(false);
   const [waitingForKey, setWaitingForKey] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+
+  const { addToCart, isInCart } = useCart();
 
   const contractAddr = CONTRACT_ADDRESSES[targetChainId];
   const { data: rawItems, isLoading: isItemLoading, refetch: refetchItems } = useReadContract({
@@ -309,6 +317,17 @@ export default function ItemDetailsPage() {
               </div>
             </div>
 
+            {/* Reviews Section */}
+            <div className="space-y-4 pt-6 border-t border-white/10">
+              <ReviewList itemId={itemId.toString()} chainId={targetChainId} limit={3} />
+              <ReviewForm
+                itemId={itemId.toString()}
+                chainId={targetChainId}
+                sellerAddress={item.seller}
+                isOwner={isOwner}
+              />
+            </div>
+
             <div className="mt-auto pt-6 border-t border-white/10">
               <div className="flex justify-between items-end mb-6">
                 <span className="text-sm text-gray-400 font-bold uppercase">Price</span>
@@ -329,15 +348,68 @@ export default function ItemDetailsPage() {
                   {!accessKey && <p className="text-xs text-center mt-2 text-yellow-500 font-mono">* Payment sent. Waiting for seller to release encryption key.</p>}
                 </>
               ) : (
-                <button
-                  onClick={handleBuy}
-                  disabled={isSoldOut || isBuying}
-                  className={cn("w-full py-4 rounded-xl font-black uppercase tracking-widest shadow-neon hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 text-lg",
-                    isSoldOut ? "bg-gray-800 text-gray-500 cursor-not-allowed" : "bg-primary text-black hover:bg-white")}
-                >
-                  {isBuying ? <Loader2 className="animate-spin" /> : <Lock size={20} />}
-                  {isSoldOut ? "Artifact Unavailable" : "Acquire Secure Key"}
-                </button>
+                <div className="space-y-3">
+                  {/* Quantity Selector */}
+                  <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
+                    <span className="text-sm text-white/60">Quantity</span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                        className="p-2 rounded-lg bg-white/5 text-white hover:bg-white/10 transition-all"
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <span className="w-8 text-center font-mono font-bold">{quantity}</span>
+                      <button
+                        onClick={() => setQuantity(q => Math.min(max - sold, q + 1))}
+                        className="p-2 rounded-lg bg-white/5 text-white hover:bg-white/10 transition-all"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Buy Now Button */}
+                  <button
+                    onClick={handleBuy}
+                    disabled={isSoldOut || isBuying}
+                    className={cn("w-full py-4 rounded-xl font-black uppercase tracking-widest shadow-neon hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 text-lg",
+                      isSoldOut ? "bg-gray-800 text-gray-500 cursor-not-allowed" : "bg-primary text-black hover:bg-white")}
+                  >
+                    {isBuying ? <Loader2 className="animate-spin" /> : <Lock size={20} />}
+                    {isSoldOut ? "Artifact Unavailable" : "Buy Now"}
+                  </button>
+
+                  {/* Add to Cart Button */}
+                  <button
+                    onClick={() => {
+                      addToCart({
+                        itemId: itemId.toString(),
+                        chainId: targetChainId,
+                        price: item.price,
+                        name: item.name,
+                        previewUrl: meta?.image || '',
+                        seller: item.seller,
+                        fileType: item.fileType
+                      });
+                    }}
+                    disabled={isSoldOut || isInCart(itemId.toString(), targetChainId)}
+                    className={cn(
+                      "w-full py-3 rounded-xl font-bold uppercase tracking-wide transition-all flex items-center justify-center gap-2",
+                      isInCart(itemId.toString(), targetChainId)
+                        ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                        : isSoldOut
+                          ? "bg-gray-800 text-gray-500 cursor-not-allowed"
+                          : "bg-white/5 text-white border border-white/10 hover:bg-white/10"
+                    )}
+                  >
+                    {isInCart(itemId.toString(), targetChainId) ? (
+                      <><Check size={16} /> In Cart</>
+                    ) : (
+                      <><ShoppingCart size={16} /> Add to Cart</>
+                    )}
+                  </button>
+                </div>
               )}
 
               <p className="text-center text-[10px] text-gray-600 mt-4 uppercase tracking-widest flex items-center justify-center gap-1">
