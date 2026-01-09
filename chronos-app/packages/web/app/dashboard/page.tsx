@@ -3,12 +3,12 @@
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount, useReadContract, useWriteContract, useWatchContractEvent, usePublicClient, useReadContracts, useSignMessage } from "wagmi";
-import { parseAbiItem, formatEther, type AbiEvent } from "viem";
+import { parseAbiItem, formatEther } from "viem";
 import { Navigation } from "../../components/Navigation";
 import { Footer } from "../../components/Footer";
-import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts"; 
-import { signatureToKey, decryptFile } from "@/lib/crypto"; 
-import { fetchIPFS } from "@/lib/ipfs"; 
+import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts";
+import { signatureToKey, decryptFile } from "@/lib/crypto";
+import { fetchIPFS } from "@/lib/ipfs";
 import { cn } from "@/lib/utils";
 import { Terminal, Key, ShoppingBag, Plus, Archive, Coins, Shield, CheckCircle2, AlertCircle, X, Loader2, RefreshCw, Download, Clock, Ban, ArrowUpRight, ArrowDownLeft, Trash2 } from "lucide-react";
 
@@ -35,17 +35,17 @@ const formatTimeAgo = (timestamp: number | undefined) => {
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
-  const router = useRouter(); 
-  const { address, chain } = useAccount(); 
+  const router = useRouter();
+  const { address, chain } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const { signMessageAsync } = useSignMessage();
   const publicClient = usePublicClient();
-  
+
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  
+
   // Event State
   const [salesEvents, setSalesEvents] = useState<any[]>([]);
   const [deliveryEvents, setDeliveryEvents] = useState<any[]>([]);
@@ -57,46 +57,47 @@ export default function DashboardPage() {
 
   // 1. Read Current Items
   const { data: rawItems, refetch: refetchItems } = useReadContract({
-    address: activeContract, 
-    abi: PAYLOCK_ABI, 
+    address: activeContract,
+    abi: PAYLOCK_ABI,
     functionName: 'getMarketplaceItems',
   });
   const allItems = (rawItems as any[]) || [];
 
   const { data: ownershipData } = useReadContracts({
     contracts: allItems.map((item) => ({
-      address: activeContract, 
-      abi: PAYLOCK_ABI, 
-      functionName: 'checkOwnership', 
+      address: activeContract,
+      abi: PAYLOCK_ABI,
+      functionName: 'checkOwnership',
       args: [item.id, address],
     })),
     query: { enabled: !!address && allItems.length > 0 }
   });
 
   // Watchers
-  useWatchContractEvent({ 
-    address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemPurchased', 
-    onLogs: () => { refetchItems(); fetchHistory(); } 
+  useWatchContractEvent({
+    address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemPurchased',
+    onLogs: () => { refetchItems(); fetchHistory(); }
   });
-  useWatchContractEvent({ 
-    address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemCanceled', 
-    onLogs: () => { refetchItems(); fetchHistory(); } 
+  useWatchContractEvent({
+    address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemCanceled',
+    onLogs: () => { refetchItems(); fetchHistory(); }
   });
-  useWatchContractEvent({ 
-    address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemListed', 
-    onLogs: () => { refetchItems(); fetchHistory(); } 
+  useWatchContractEvent({
+    address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemListed',
+    onLogs: () => { refetchItems(); fetchHistory(); }
   });
-  
+
   // 2. Fetch History (Chunked)
   const fetchHistory = async () => {
     if (!publicClient || !activeContract) return;
     setLoadingHistory(true);
     try {
       const currentBlock = await publicClient.getBlockNumber();
-      const SCAN_DEPTH = BigInt(50000); 
-      const CHUNK_SIZE = BigInt(3000);
+      // OPTIMIZATION: Reduced from 50000 to 5000 blocks for faster loading
+      const SCAN_DEPTH = BigInt(5000);
+      const CHUNK_SIZE = BigInt(2000);
       let fromBlock = currentBlock - SCAN_DEPTH > BigInt(0) ? currentBlock - SCAN_DEPTH : BigInt(0);
-      
+
       const fetchLogsInChunks = async (eventName: string) => {
         let logs: any[] = [];
         for (let i = fromBlock; i < currentBlock; i += CHUNK_SIZE) {
@@ -104,12 +105,12 @@ export default function DashboardPage() {
           try {
             const chunk = await publicClient.getLogs({
               address: activeContract,
-              event: parseAbiItem(eventName) as AbiEvent,
+              event: parseAbiItem(eventName) as any,
               fromBlock: i,
               toBlock: to
             });
             logs = [...logs, ...chunk];
-          } catch (e) {}
+          } catch (e) { }
         }
         return logs;
       };
@@ -129,12 +130,12 @@ export default function DashboardPage() {
       ]);
 
       const timestampMap: Record<string, number> = {};
-      const recentBlocks = Array.from(allBlockNumbers).sort().slice(-50); 
+      const recentBlocks = Array.from(allBlockNumbers).sort().slice(-50);
       await Promise.all(recentBlocks.map(async (bn) => {
         try {
           const block = await publicClient.getBlock({ blockNumber: bn });
           timestampMap[bn.toString()] = Number(block.timestamp);
-        } catch {}
+        } catch { }
       }));
 
       setBlockTimestamps(timestampMap);
@@ -150,16 +151,16 @@ export default function DashboardPage() {
     }
   };
 
-  useEffect(() => { 
+  useEffect(() => {
     if (publicClient && activeContract) { fetchHistory(); }
-    setMounted(true); 
-  }, [publicClient, activeContract, chain?.id]); 
+    setMounted(true);
+  }, [publicClient, activeContract, chain?.id]);
 
   // 3. Unified Feed Logic
   const unifiedFeed = useMemo(() => {
     if (!address) return [];
     const feed: any[] = [];
-    
+
     allItems.forEach((item: any, index: number) => {
       const itemId = item.id.toString();
       const eventCancelled = cancelledEvents.some(c => c.id === itemId);
@@ -169,28 +170,28 @@ export default function DashboardPage() {
         const itemSales = salesEvents.filter(s => s.id === itemId);
         itemSales.forEach(sale => {
           const isDelivered = deliveryEvents.some(d => d.id === itemId && d.buyer === sale.buyer);
-          feed.push({ 
+          feed.push({
             ...item, type: 'SALE', buyer: sale.buyer, isDelivered, isCanceled,
-            timestamp: blockTimestamps[sale.block?.toString()] 
+            timestamp: blockTimestamps[sale.block?.toString()]
           });
         });
 
         const creation = listingEvents.find(l => l.id === itemId);
         if (creation || !creation) {
-           feed.push({ 
-             ...item, type: isCanceled ? 'CANCELED' : 'LISTED', buyer: null, isCanceled,
-             timestamp: creation ? blockTimestamps[creation.block?.toString()] : 0 
-           });
+          feed.push({
+            ...item, type: isCanceled ? 'CANCELED' : 'LISTED', buyer: null, isCanceled,
+            timestamp: creation ? blockTimestamps[creation.block?.toString()] : 0
+          });
         }
       }
 
       const ownership = ownershipData?.[index]?.result as [boolean, string] | undefined;
       const myPurchaseEvent = salesEvents.find(s => s.id === itemId && s.buyer.toLowerCase() === address.toLowerCase());
-      
+
       if (ownership && ownership[0] === true) {
-        feed.push({ 
-          ...item, 
-          type: 'BOUGHT', 
+        feed.push({
+          ...item,
+          type: 'BOUGHT',
           buyer: address,
           isCanceled,
           hasKey: !!(ownership[1] && ownership[1].length > 0),
@@ -215,25 +216,25 @@ export default function DashboardPage() {
       setProcessingId(item.id.toString());
       const localKeys = JSON.parse(localStorage.getItem('chronos_seller_keys') || '{}');
       let storedKey = localKeys[item.name.trim()];
-      
+
       if (!storedKey) {
         const signature = await signMessageAsync({ message: `CHRONOS_ACCESS:${item.name.trim()}` });
         storedKey = signatureToKey(signature);
       }
-      
-      await writeContractAsync({ 
-        address: activeContract, 
-        abi: PAYLOCK_ABI, 
-        functionName: 'deliverKey', 
-        args: [BigInt(item.id), item.buyer, storedKey] as any 
+
+      await writeContractAsync({
+        address: activeContract,
+        abi: PAYLOCK_ABI,
+        functionName: 'deliverKey',
+        args: [BigInt(item.id), item.buyer, storedKey] as any
       });
-      
-      setToast({message: "Key Transmitted Successfully!", type: 'success'});
-      fetchHistory(); 
-    } catch (e: any) { 
-      setToast({message: e.message || "Delivery Failed", type: 'error'}); 
-    } finally { 
-      setProcessingId(null); 
+
+      setToast({ message: "Key Transmitted Successfully!", type: 'success' });
+      fetchHistory();
+    } catch (e: any) {
+      setToast({ message: e.message || "Delivery Failed", type: 'error' });
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -242,17 +243,17 @@ export default function DashboardPage() {
     try {
       setDownloadingId(item.id.toString());
       setToast({ message: "Fetching & Decrypting...", type: 'success' });
-      
+
       const encryptedBlob = await fetchIPFS(item.ipfsCid);
       const decryptedBlob = await decryptFile(encryptedBlob, item.receivedKey);
-      
+
       const url = window.URL.createObjectURL(decryptedBlob);
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `${item.name.replace(/\s+/g, '_')}_UNLOCKED.${item.fileType?.toLowerCase() || 'dat'}`);
       document.body.appendChild(link);
       link.click();
-      
+
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
       setToast({ message: "Download Complete", type: 'success' });
@@ -264,23 +265,23 @@ export default function DashboardPage() {
   };
 
   const handleCancel = async (item: any) => {
-    if(!confirm("Cancel listing?")) return;
+    if (!confirm("Cancel listing?")) return;
     try {
       setProcessingId(item.id.toString());
-      await writeContractAsync({ 
-        address: activeContract, 
-        abi: PAYLOCK_ABI, 
-        functionName: 'cancelListing', 
-        args: [BigInt(item.id)] 
+      await writeContractAsync({
+        address: activeContract,
+        abi: PAYLOCK_ABI,
+        functionName: 'cancelListing',
+        args: [BigInt(item.id)]
       });
-      setToast({message: "Listing Cancelled!", type: 'success'});
-      setCancelledEvents(prev => [...prev, { id: item.id.toString(), block: BigInt(0) }]); 
+      setToast({ message: "Listing Cancelled!", type: 'success' });
+      setCancelledEvents(prev => [...prev, { id: item.id.toString(), block: BigInt(0) }]);
       fetchHistory();
       refetchItems();
-    } catch (e: any) { 
-      setToast({message: e.message || "Cancel Failed", type: 'error'}); 
-    } finally { 
-      setProcessingId(null); 
+    } catch (e: any) {
+      setToast({ message: e.message || "Cancel Failed", type: 'error' });
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -294,11 +295,11 @@ export default function DashboardPage() {
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <div className="flex items-center gap-2 text-xs font-mono text-primary/80 mb-1 tracking-widest uppercase"><Terminal size={14}/> Chronos_Link :: Active</div>
+            <div className="flex items-center gap-2 text-xs font-mono text-primary/80 mb-1 tracking-widest uppercase"><Terminal size={14} /> Chronos_Link :: Active</div>
             <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight drop-shadow-lg">Dashboard <span className="text-primary/40 font-light">//</span> Activity</h2>
           </div>
           <button onClick={() => router.push('/create-listing')} className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-primary hover:bg-primary/80 text-black text-sm font-bold rounded-xl shadow-neon hover:scale-105 transition-all">
-            <Plus size={18}/> Upload New File
+            <Plus size={18} /> Upload New File
           </button>
         </div>
 
@@ -306,22 +307,22 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
           {/* Stats Cards (Same as previous) */}
           <div className="bg-[#0b1a24]/60 border border-white/10 rounded-xl p-6 backdrop-blur-md hover:border-primary/50 transition-all">
-            <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-primary/10 text-primary"><Coins size={24}/></div></div>
+            <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-primary/10 text-primary"><Coins size={24} /></div></div>
             <p className="text-gray-400 text-sm font-medium uppercase">Revenue</p>
             <p className="text-2xl lg:text-3xl font-mono font-bold text-white mt-1">{stats.revenue.toFixed(2)} {currencySymbol}</p>
           </div>
           <div className="bg-[#0b1a24]/60 border border-white/10 rounded-xl p-6 backdrop-blur-md hover:border-green-500/50 transition-all">
-            <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-green-500/10 text-green-500"><Download size={24}/></div></div>
+            <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-green-500/10 text-green-500"><Download size={24} /></div></div>
             <p className="text-gray-400 text-sm font-medium uppercase">Purchased</p>
             <p className="text-2xl lg:text-3xl font-mono font-bold text-white mt-1">{stats.bought}</p>
           </div>
           <div className="bg-[#0b1a24]/60 border border-white/10 rounded-xl p-6 backdrop-blur-md hover:border-blue-500/50 transition-all">
-            <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-blue-500/10 text-blue-500"><ShoppingBag size={24}/></div></div>
+            <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-blue-500/10 text-blue-500"><ShoppingBag size={24} /></div></div>
             <p className="text-gray-400 text-sm font-medium uppercase">Total Sales</p>
             <p className="text-2xl lg:text-3xl font-mono font-bold text-white mt-1">{stats.sold}</p>
           </div>
           <div className="bg-[#0b1a24]/60 border border-white/10 rounded-xl p-6 backdrop-blur-md hover:border-warning/50 transition-all">
-            <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-warning/10 text-warning"><Key size={24}/></div></div>
+            <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-warning/10 text-warning"><Key size={24} /></div></div>
             <p className="text-gray-400 text-sm font-medium uppercase">Pending</p>
             <p className="text-2xl lg:text-3xl font-mono font-bold text-white mt-1">{unifiedFeed.filter(i => i.type === 'SALE' && !i.isDelivered).length}</p>
           </div>
@@ -330,10 +331,10 @@ export default function DashboardPage() {
         {/* ACTIVITY FEED */}
         <div className="w-full overflow-hidden rounded-xl border border-white/10 bg-[#0b1a24]/60 backdrop-blur-md shadow-2xl">
           <div className="p-4 border-b border-white/10 bg-white/5 flex justify-between items-center">
-            <h3 className="font-bold text-white uppercase tracking-wider text-sm flex items-center gap-2"><Clock size={16}/> Recent Activity</h3>
-            {loadingHistory && <Loader2 className="animate-spin text-primary" size={16}/>}
+            <h3 className="font-bold text-white uppercase tracking-wider text-sm flex items-center gap-2"><Clock size={16} /> Recent Activity</h3>
+            {loadingHistory && <Loader2 className="animate-spin text-primary" size={16} />}
           </div>
-          
+
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
@@ -356,13 +357,13 @@ export default function DashboardPage() {
                     <tr key={`${item.type}-${i}`} className="group hover:bg-white/5 transition-colors">
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
-                          <div className={cn("p-2 rounded-lg border", 
+                          <div className={cn("p-2 rounded-lg border",
                             isSale ? "bg-green-500/10 border-green-500/20 text-green-500" :
-                            isBought ? "bg-blue-500/10 border-blue-500/20 text-blue-500" :
-                            isCanceled ? "bg-red-500/10 border-red-500/20 text-red-500" :
-                            "bg-white/10 border-white/20 text-gray-400"
+                              isBought ? "bg-blue-500/10 border-blue-500/20 text-blue-500" :
+                                isCanceled ? "bg-red-500/10 border-red-500/20 text-red-500" :
+                                  "bg-white/10 border-white/20 text-gray-400"
                           )}>
-                            {isSale ? <ArrowDownLeft size={16}/> : isBought ? <ShoppingBag size={16}/> : isCanceled ? <Ban size={16}/> : <Plus size={16}/>}
+                            {isSale ? <ArrowDownLeft size={16} /> : isBought ? <ShoppingBag size={16} /> : isCanceled ? <Ban size={16} /> : <Plus size={16} />}
                           </div>
                           <div>
                             <p className="font-bold text-white text-sm">{item.name}</p>
@@ -381,49 +382,49 @@ export default function DashboardPage() {
                         {formatTimeAgo(item.timestamp)}
                       </td>
                       <td className="py-4 px-6 text-center">
-                        <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase", 
+                        <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase",
                           isCanceled ? "bg-red-500/10 text-red-500 border-red-500/20" :
-                          item.isDelivered ? "bg-green-500/10 text-green-500 border-green-500/20" : 
-                          item.type === 'SALE' && !item.isDelivered ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/20" : 
-                          "bg-blue-500/10 text-blue-500 border-blue-500/20")}>
+                            item.isDelivered ? "bg-green-500/10 text-green-500 border-green-500/20" :
+                              item.type === 'SALE' && !item.isDelivered ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/20" :
+                                "bg-blue-500/10 text-blue-500 border-blue-500/20")}>
                           {isCanceled ? "Archived" : item.isDelivered ? "Completed" : item.type === 'SALE' ? "Pending Key" : "Active"}
                         </span>
                       </td>
                       <td className="py-4 px-6 text-right">
                         {/* DELIVER BUTTON (For Sales) */}
                         {isSale && !item.isDelivered && !isCanceled && (
-                          <button 
-                            onClick={() => handleDeliver(item)} 
-                            disabled={!!processingId} 
+                          <button
+                            onClick={() => handleDeliver(item)}
+                            disabled={!!processingId}
                             className="bg-primary hover:bg-white text-black px-4 py-2 rounded-lg text-xs font-bold shadow-neon transition-all flex items-center justify-center gap-2 ml-auto hover:scale-105 active:scale-95"
                           >
-                            {processingId === item.id.toString() ? <Loader2 className="animate-spin" size={14}/> : <Key size={14}/>} 
+                            {processingId === item.id.toString() ? <Loader2 className="animate-spin" size={14} /> : <Key size={14} />}
                             DELIVER KEY
                           </button>
                         )}
-                        
+
                         {/* CANCEL BUTTON (For Active Listings) */}
                         {isListed && !isCanceled && (
-                          <button 
-                            onClick={() => handleCancel(item)} 
-                            disabled={!!processingId} 
+                          <button
+                            onClick={() => handleCancel(item)}
+                            disabled={!!processingId}
                             className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ml-auto hover:scale-105 active:scale-95"
                           >
-                            {processingId === item.id.toString() ? <Loader2 className="animate-spin" size={14}/> : <Trash2 size={14}/>} 
+                            {processingId === item.id.toString() ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
                             CANCEL
                           </button>
                         )}
 
                         {/* DOWNLOAD BUTTON (For Buyers) */}
                         {isBought && item.hasKey && (
-                           <button 
-                             onClick={() => handleDownload(item)}
-                             disabled={downloadingId === item.id.toString()}
-                             className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded text-xs font-bold border border-white/10 ml-auto flex gap-2 items-center transition-colors"
-                           >
-                             {downloadingId === item.id.toString() ? <Loader2 className="animate-spin" size={12}/> : <Download size={12}/>} 
-                             Download
-                           </button>
+                          <button
+                            onClick={() => handleDownload(item)}
+                            disabled={downloadingId === item.id.toString()}
+                            className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded text-xs font-bold border border-white/10 ml-auto flex gap-2 items-center transition-colors"
+                          >
+                            {downloadingId === item.id.toString() ? <Loader2 className="animate-spin" size={12} /> : <Download size={12} />}
+                            Download
+                          </button>
                         )}
                       </td>
                     </tr>

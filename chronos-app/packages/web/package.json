@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.965.0",
     "@polkadot/api": "^16.5.4",
     "@rainbow-me/rainbowkit": "^2.2.10",
     "@storagehub-sdk/core": "^0.4.0",
