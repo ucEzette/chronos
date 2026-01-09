@@ -432,75 +432,60 @@ export function Navigation() {
               <div className="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
               {isConnected ? (
-                <div className="flex flex-col gap-4">
-                  {/* Balance Card */}
-                  <div className="flex justify-between items-center bg-white/5 p-5 rounded-2xl border border-white/10 backdrop-blur-md">
-                    <div>
-                      <span className="text-gray-400 text-xs uppercase tracking-wider">Balance</span>
-                      <p className="text-primary font-bold font-mono text-xl mt-1">
-                        {balance ? Number(balance.formatted).toFixed(3) : "0.00"}
-                        <span className="text-sm ml-2 text-primary/60">{currencySymbol}</span>
-                      </p>
+                <div className="flex flex-col gap-3">
+                  {/* Compact Balance */}
+                  <div className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/10">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="text-primary" size={16} />
+                      <span className="text-xs text-white/60">Balance</span>
                     </div>
-                    <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Wallet className="text-primary" size={24} />
-                    </div>
+                    <span className="text-primary font-bold font-mono text-sm">
+                      {balance ? Number(balance.formatted).toFixed(3) : "0.00"} {currencySymbol}
+                    </span>
                   </div>
 
-                  {/* Mobile Network Switcher */}
-                  <div className="space-y-2">
-                    <p className="text-[10px] text-white/40 uppercase tracking-wider font-mono px-1">Network</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => handleSwitchNetwork(55931)}
-                        className={cn(
-                          "py-4 px-3 text-xs font-bold rounded-2xl border text-center transition-all flex flex-col items-center gap-2 active:scale-[0.98]",
-                          chain?.id === 55931
-                            ? "bg-primary text-black border-primary shadow-[0_0_30px_rgba(0,229,255,0.3)]"
-                            : "bg-white/5 text-white border-white/10 hover:bg-white/10"
-                        )}
-                      >
-                        <span className={cn(
-                          "size-3 rounded-full",
-                          chain?.id === 55931 ? "bg-black" : "bg-cyan-400 shadow-[0_0_10px_rgba(0,229,255,0.5)]"
-                        )} />
-                        DataHaven
-                      </button>
-                      <button
-                        onClick={() => handleSwitchNetwork(5042002)}
-                        className={cn(
-                          "py-4 px-3 text-xs font-bold rounded-2xl border text-center transition-all flex flex-col items-center gap-2 active:scale-[0.98]",
-                          chain?.id === 5042002
-                            ? "bg-primary text-black border-primary shadow-[0_0_30px_rgba(0,229,255,0.3)]"
-                            : "bg-white/5 text-white border-white/10 hover:bg-white/10"
-                        )}
-                      >
-                        <span className={cn(
-                          "size-3 rounded-full",
-                          chain?.id === 5042002 ? "bg-black" : "bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
-                        )} />
-                        Arc Testnet
-                      </button>
-                    </div>
+                  {/* Compact Network Switcher */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleSwitchNetwork(55931)}
+                      className={cn(
+                        "flex-1 py-2.5 px-3 text-[10px] font-bold rounded-xl border text-center transition-all flex items-center justify-center gap-2",
+                        chain?.id === 55931
+                          ? "bg-primary text-black border-primary"
+                          : "bg-white/5 text-white/60 border-white/10"
+                      )}
+                    >
+                      <span className="size-2 rounded-full bg-cyan-400" />
+                      DataHaven
+                    </button>
+                    <button
+                      onClick={() => handleSwitchNetwork(5042002)}
+                      className={cn(
+                        "flex-1 py-2.5 px-3 text-[10px] font-bold rounded-xl border text-center transition-all flex items-center justify-center gap-2",
+                        chain?.id === 5042002
+                          ? "bg-primary text-black border-primary"
+                          : "bg-white/5 text-white/60 border-white/10"
+                      )}
+                    >
+                      <span className="size-2 rounded-full bg-blue-500" />
+                      Arc
+                    </button>
                   </div>
-
-                  {/* Spacer */}
-                  <div className="flex-1" />
 
                   {/* Disconnect Button */}
                   <button
                     onClick={handleDisconnect}
-                    className="w-full py-4 bg-red-500/10 text-red-400 rounded-2xl font-bold text-sm border border-red-500/20 flex items-center justify-center gap-3 hover:bg-red-500/20 active:scale-[0.98] transition-all mt-auto"
+                    className="w-full py-3 bg-red-500/10 text-red-400 rounded-xl font-bold text-xs border border-red-500/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                   >
-                    <LogOut size={18} /> Disconnect Wallet
+                    <LogOut size={14} /> Disconnect
                   </button>
                 </div>
               ) : (
                 <button
                   onClick={() => { setIsConnectOpen(true); setIsMobileMenuOpen(false); }}
-                  className="w-full py-5 bg-primary text-black rounded-2xl font-bold text-sm shadow-[0_0_30px_rgba(0,229,255,0.3)] flex items-center justify-center gap-3 active:scale-[0.98] transition-all"
+                  className="w-full py-4 bg-primary text-black rounded-xl font-bold text-sm shadow-[0_0_20px_rgba(0,229,255,0.3)] flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                 >
-                  <Wallet size={20} /> Connect Wallet
+                  <Wallet size={18} /> Connect Wallet
                 </button>
               )}
             </div>
