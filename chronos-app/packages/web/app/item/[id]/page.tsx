@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAccount, useWriteContract, useReadContract, useSwitchChain } from "wagmi";
 import { formatEther } from "viem";
 import { Navigation } from "@/components/Navigation";
@@ -286,15 +287,21 @@ export default function ItemDetailsPage() {
               </div>
               <p className="text-primary font-mono text-sm mb-4">ID: #{item.id.toString()} • {type}</p>
 
-              <div className="flex items-center gap-3 mb-6">
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-black font-bold">
+              <Link
+                href={`/profile/${item.seller}`}
+                className="flex items-center gap-3 mb-6 p-3 -m-3 rounded-xl hover:bg-white/5 transition-all group cursor-pointer"
+              >
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-black font-bold group-hover:shadow-[0_0_20px_rgba(0,229,255,0.3)] transition-all">
                   <User size={20} />
                 </div>
-                <div>
-                  <p className="text-xs text-gray-400 uppercase font-bold">Creator</p>
-                  <p className="text-sm font-mono">{item.seller.slice(0, 6)}...{item.seller.slice(-4)}</p>
+                <div className="flex-1">
+                  <p className="text-xs text-gray-400 uppercase font-bold">Creator / Seller</p>
+                  <p className="text-sm font-mono group-hover:text-primary transition-colors">{item.seller.slice(0, 6)}...{item.seller.slice(-4)}</p>
                 </div>
-              </div>
+                <div className="text-xs text-white/30 group-hover:text-primary transition-colors flex items-center gap-1">
+                  View Profile <span className="text-lg">→</span>
+                </div>
+              </Link>
             </div>
 
             <div className="p-6 rounded-xl bg-white/5 border border-white/10">

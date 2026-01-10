@@ -443,6 +443,8 @@ export function Navigation() {
                       <span className={cn("size-2 rounded-full", chain?.id === 55931 ? "bg-cyan-400" : "bg-blue-500")} />
                       {chain?.id === 55931 ? "DH" : "Arc"}
                     </button>
+                    {/* Mobile Cart Button */}
+                    <CartButton />
                     <button
                       onClick={handleDisconnect}
                       className="px-3 py-2 bg-red-500/10 rounded-lg text-red-400"

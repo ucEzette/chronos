@@ -45,13 +45,17 @@ export default function ProfilePage() {
   const { data: ensAvatar } = useEnsAvatar({ name: ensName! });
 
   // State
-  const [activeTab, setActiveTab] = useState<'INVENTORY' | 'TRANSACTIONS' | 'SETTINGS'>('INVENTORY');
+  const [activeTab, setActiveTab] = useState<'LISTINGS' | 'INVENTORY' | 'TRANSACTIONS' | 'SETTINGS'>('LISTINGS');
   const [inventory, setInventory] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [reputation, setReputation] = useState(50);
   const [copied, setCopied] = useState(false);
-  const [settings, setSettings] = useState({ displayName: "", avatarUrl: "", twitterHandle: "", ghostMode: false, bio: "", discord: "", website: "", github: "" });
+  const [settings, setSettings] = useState({
+    displayName: "", avatarUrl: "", twitterHandle: "", ghostMode: false,
+    bio: "", discord: "", website: "", github: "",
+    hideInventory: false, hideTransactions: false
+  });
 
   // --- ROBUST DATA FETCHING ---
   useEffect(() => {
@@ -199,8 +203,17 @@ export default function ProfilePage() {
         setInventory(allItems);
         setTransactions(allTxs.sort((a, b) => b.timestamp - a.timestamp));
 
-        // Simple Reputation Score Calculation
-        const score = Math.min(100, Math.max(0, 50 + (totalSales * 5) - (totalCancels * 5)));
+        // Reputation Score Calculation (includes reviews)
+        // Import reviews for this seller
+        const { getSellerAverageRating } = await import('@/lib/reviews');
+        const { average: reviewAvg, count: reviewCount } = getSellerAverageRating(profileAddress);
+
+        // Base: 50, +5 per sale, -5 per cancel, +review bonus (scales with review count)
+        const salesBonus = totalSales * 5;
+        const cancelPenalty = totalCancels * 5;
+        const reviewBonus = reviewCount > 0 ? Math.round((reviewAvg - 3) * 10) : 0; // +20 max for 5 stars, -20 for 1 star
+
+        const score = Math.min(100, Math.max(0, 50 + salesBonus - cancelPenalty + reviewBonus));
         setReputation(score);
 
       } finally {
@@ -288,18 +301,45 @@ export default function ProfilePage() {
         {/* MAIN CONTENT */}
         <div className="flex-1 flex flex-col gap-6 min-w-0 order-2 lg:order-none">
           <div className="flex overflow-x-auto pb-2 scrollbar-hide gap-1 border-b border-white/10">
-            {['INVENTORY', 'TRANSACTIONS', 'SETTINGS'].map((tab) => (
+            {/* Dynamic tabs based on privacy settings */}
+            {(() => {
+              const tabs = ['LISTINGS'];
+              // Only show INVENTORY if own profile or privacy not set
+              if (isOwnProfile || !settings.hideInventory) tabs.push('INVENTORY');
+              // Only show TRANSACTIONS if own profile or privacy not set
+              if (isOwnProfile || !settings.hideTransactions) tabs.push('TRANSACTIONS');
+              // Settings only for own profile
+              if (isOwnProfile) tabs.push('SETTINGS');
+              return tabs;
+            })().map((tab) => (
               <button key={tab} onClick={() => setActiveTab(tab as any)} className={cn("px-6 py-3 rounded-t-lg font-bold text-xs tracking-wide transition-all border-t border-x", activeTab === tab ? "bg-primary text-black border-primary shadow-[0_-4px_20px_-5px_rgba(0,229,255,0.3)] relative z-10" : "bg-[#0f172a] text-gray-400 hover:text-white border-white/5 hover:bg-white/5")}>{tab}</button>
             ))}
           </div>
 
+          {/* 0. LISTINGS TAB (Seller's Products) */}
+          {activeTab === 'LISTINGS' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <p className="text-xs text-white/40 mb-4">Items listed for sale by this user</p>
+              {isLoading ? (
+                <div className="py-20 text-center"><RefreshCw className="animate-spin mx-auto text-primary" /></div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Listed items would be fetched separately - showing placeholder */}
+                  <div className="text-center py-12 text-white/30 font-mono text-xs col-span-full border border-dashed border-white/10 rounded-xl">
+                    Listed items appear here
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 1. INVENTORY TAB */}
-          {activeTab === 'INVENTORY' && (
+          {activeTab === 'INVENTORY' && (isOwnProfile || !settings.hideInventory) && (
             <ProfileInventory items={inventory} isLoading={isLoading} onDecrypt={handleDecrypt} />
           )}
 
           {/* 2. TRANSACTIONS TAB */}
-          {activeTab === 'TRANSACTIONS' && (
+          {activeTab === 'TRANSACTIONS' && (isOwnProfile || !settings.hideTransactions) && (
             <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {isLoading ? (
                 <div className="py-20 text-center"><RefreshCw className="animate-spin mx-auto text-primary" /></div>
@@ -486,6 +526,30 @@ export default function ProfilePage() {
                   <div>
                     <p className="text-sm font-bold text-white">Ghost Mode</p>
                     <p className="text-xs text-white/40">Hide your profile from public view</p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 p-4 bg-black/40 rounded-xl border border-white/10 cursor-pointer hover:border-white/20 transition-all">
+                  <input
+                    type="checkbox"
+                    checked={settings.hideInventory}
+                    onChange={e => setSettings({ ...settings, hideInventory: e.target.checked })}
+                    className="w-5 h-5 rounded border-white/20 bg-black/40 text-primary focus:ring-primary/30"
+                  />
+                  <div>
+                    <p className="text-sm font-bold text-white">Hide Inventory</p>
+                    <p className="text-xs text-white/40">Hide your owned items from other users</p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 p-4 bg-black/40 rounded-xl border border-white/10 cursor-pointer hover:border-white/20 transition-all">
+                  <input
+                    type="checkbox"
+                    checked={settings.hideTransactions}
+                    onChange={e => setSettings({ ...settings, hideTransactions: e.target.checked })}
+                    className="w-5 h-5 rounded border-white/20 bg-black/40 text-primary focus:ring-primary/30"
+                  />
+                  <div>
+                    <p className="text-sm font-bold text-white">Hide Transactions</p>
+                    <p className="text-xs text-white/40">Hide your transaction history from other users</p>
                   </div>
                 </label>
               </div>

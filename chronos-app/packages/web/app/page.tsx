@@ -11,12 +11,13 @@ import { Footer } from "../components/Footer";
 import { getDataHavenUrl } from "@/lib/datahaven";
 import { getCryptoPrices } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { useCart } from "@/components/CartContext";
 import { CATEGORIES, getCategoryById } from "@/lib/categories";
 import {
   Search, Video, FileText, Play, Archive, ChevronDown,
   User, Pause, RefreshCw, Globe, AlertTriangle, Sparkles,
   TrendingUp, Clock, DollarSign, Package, Filter, X,
-  Grid, List, SlidersHorizontal
+  Grid, List, SlidersHorizontal, ShoppingCart, Heart
 } from "lucide-react";
 
 // --- Skeleton Card Component ---
@@ -117,6 +118,9 @@ interface MetaState {
 
 // --- Marketplace Card Component (Memoized for performance) ---
 const MarketplaceCard = memo(function MarketplaceCard({ item, viewMode = 'grid' }: { item: any; viewMode?: 'grid' | 'list' }) {
+  const { addToCart, isInCart } = useCart();
+  const { address } = useAccount();
+  const [isFav, setIsFav] = useState(false);
   const [meta, setMeta] = useState<MetaState>({
     name: item.name,
     description: "Loading...",
@@ -363,6 +367,34 @@ const MarketplaceCard = memo(function MarketplaceCard({ item, viewMode = 'grid' 
         </span>
       </div>
 
+      {/* Favorite Button */}
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (address) {
+            const { toggleFavorite } = require('@/lib/favorites');
+            const newState = toggleFavorite(address, {
+              itemId: item.id.toString(),
+              chainId: item.chainId,
+              name: item.name,
+              previewUrl: meta?.image || '',
+              price: item.price,
+              seller: item.seller
+            });
+            setIsFav(newState);
+          }
+        }}
+        className={cn(
+          "absolute top-3 left-3 z-20 size-8 rounded-full flex items-center justify-center transition-all",
+          isFav
+            ? "bg-red-500/90 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]"
+            : "bg-black/60 text-white/50 hover:text-red-400 hover:bg-black/80"
+        )}
+      >
+        <Heart size={14} className={cn(isFav && "fill-current")} />
+      </button>
+
       {/* Image Container */}
       <Link href={`/item/${item.id}?chain=${item.chainId}`} className="cursor-pointer block">
         <div className={cn(
@@ -493,8 +525,36 @@ const MarketplaceCard = memo(function MarketplaceCard({ item, viewMode = 'grid' 
                 : "bg-primary hover:bg-white text-black shadow-[0_0_20px_rgba(0,229,255,0.3)] hover:shadow-[0_0_30px_rgba(255,255,255,0.2)]"
             )}
           >
-            {isCanceled ? "Archived" : isSoldOut ? "Sold Out" : "View & Buy"}
+            {isCanceled ? "Archived" : isSoldOut ? "Sold Out" : "View"}
           </Link>
+          {/* Add to Cart Button */}
+          {!isSoldOut && !isCanceled && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                addToCart({
+                  itemId: item.id.toString(),
+                  chainId: item.chainId,
+                  price: item.price,
+                  name: item.name,
+                  previewUrl: meta?.image || '',
+                  seller: item.seller,
+                  fileType: item.fileType
+                });
+              }}
+              disabled={isInCart(item.id.toString(), item.chainId)}
+              className={cn(
+                "p-2.5 rounded-xl transition-all active:scale-95",
+                isInCart(item.id.toString(), item.chainId)
+                  ? "bg-green-500/20 text-green-400 border border-green-500/20"
+                  : "bg-white/10 text-white hover:bg-primary/20 hover:text-primary border border-white/10 hover:border-primary/30"
+              )}
+              title={isInCart(item.id.toString(), item.chainId) ? "In Cart" : "Add to Cart"}
+            >
+              <ShoppingCart size={16} />
+            </button>
+          )}
         </div>
       </div>
     </div>
