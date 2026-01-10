@@ -287,21 +287,63 @@ export default function ItemDetailsPage() {
               </div>
               <p className="text-primary font-mono text-sm mb-4">ID: #{item.id.toString()} • {type}</p>
 
-              <Link
-                href={`/profile/${item.seller}`}
-                className="flex items-center gap-3 mb-6 p-3 -m-3 rounded-xl hover:bg-white/5 transition-all group cursor-pointer"
-              >
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-black font-bold group-hover:shadow-[0_0_20px_rgba(0,229,255,0.3)] transition-all">
-                  <User size={20} />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs text-gray-400 uppercase font-bold">Creator / Seller</p>
-                  <p className="text-sm font-mono group-hover:text-primary transition-colors">{item.seller.slice(0, 6)}...{item.seller.slice(-4)}</p>
-                </div>
-                <div className="text-xs text-white/30 group-hover:text-primary transition-colors flex items-center gap-1">
-                  View Profile <span className="text-lg">→</span>
-                </div>
-              </Link>
+              {/* Seller Info with Bio */}
+              {(() => {
+                // Load seller profile from localStorage
+                let sellerProfile: any = { displayName: '', bio: '', twitterHandle: '', discord: '', website: '', github: '' };
+                try {
+                  const saved = typeof window !== 'undefined' ? localStorage.getItem(`chronos_profile_${item.seller}`) : null;
+                  if (saved) sellerProfile = { ...sellerProfile, ...JSON.parse(saved) };
+                } catch { }
+
+                return (
+                  <div className="mb-6 p-4 rounded-xl bg-white/5 border border-white/10">
+                    <Link
+                      href={`/profile/${item.seller}`}
+                      className="flex items-center gap-3 hover:bg-white/5 -m-2 p-2 rounded-lg transition-all group"
+                    >
+                      <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-black font-bold group-hover:shadow-[0_0_20px_rgba(0,229,255,0.3)] transition-all overflow-hidden">
+                        <User size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-white group-hover:text-primary transition-colors">
+                          {sellerProfile.displayName || `${item.seller.slice(0, 6)}...${item.seller.slice(-4)}`}
+                        </p>
+                        <p className="text-xs text-gray-400 font-mono">{item.seller.slice(0, 10)}...{item.seller.slice(-6)}</p>
+                      </div>
+                      <div className="text-xs text-white/30 group-hover:text-primary transition-colors">
+                        View Profile →
+                      </div>
+                    </Link>
+
+                    {/* Bio */}
+                    {sellerProfile.bio && (
+                      <p className="text-sm text-gray-400 mt-3 italic border-t border-white/5 pt-3">
+                        "{sellerProfile.bio.slice(0, 150)}{sellerProfile.bio.length > 150 ? '...' : ''}"
+                      </p>
+                    )}
+
+                    {/* Social Links */}
+                    {(sellerProfile.twitterHandle || sellerProfile.discord || sellerProfile.website) && (
+                      <div className="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
+                        {sellerProfile.twitterHandle && (
+                          <a href={`https://twitter.com/${sellerProfile.twitterHandle}`} target="_blank" rel="noopener" className="text-xs text-blue-400 hover:underline">
+                            @{sellerProfile.twitterHandle}
+                          </a>
+                        )}
+                        {sellerProfile.discord && (
+                          <span className="text-xs text-purple-400">{sellerProfile.discord}</span>
+                        )}
+                        {sellerProfile.website && (
+                          <a href={sellerProfile.website} target="_blank" rel="noopener" className="text-xs text-primary hover:underline truncate max-w-32">
+                            {sellerProfile.website.replace('https://', '').replace('http://', '')}
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="p-6 rounded-xl bg-white/5 border border-white/10">

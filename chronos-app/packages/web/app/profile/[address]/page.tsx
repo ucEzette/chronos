@@ -12,6 +12,8 @@ import { fetchIPFS } from "../../../lib/ipfs";
 import { decryptFile } from "@/lib/crypto";
 import { cn } from "@/lib/utils";
 import { ProfileInventory } from "../ProfileInventory";
+import { getUserAvatar, ANIME_AVATARS } from "@/lib/avatars";
+import { getFavorites, FavoriteItem } from "@/lib/favorites";
 import {
   Settings, Power, Copy, Wallet, Activity, Search,
   CheckCircle2, RefreshCw, Download, Music, Video, FileText, User,
@@ -45,7 +47,7 @@ export default function ProfilePage() {
   const { data: ensAvatar } = useEnsAvatar({ name: ensName! });
 
   // State
-  const [activeTab, setActiveTab] = useState<'LISTINGS' | 'INVENTORY' | 'TRANSACTIONS' | 'SETTINGS'>('LISTINGS');
+  const [activeTab, setActiveTab] = useState<'LISTINGS' | 'FAVORITES' | 'INVENTORY' | 'TRANSACTIONS' | 'SETTINGS'>('LISTINGS');
   const [inventory, setInventory] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,6 +58,8 @@ export default function ProfilePage() {
     bio: "", discord: "", website: "", github: "",
     hideInventory: false, hideTransactions: false
   });
+  const [listings, setListings] = useState<any[]>([]); // Items listed by this seller
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]); // User's favorites
 
   // --- ROBUST DATA FETCHING ---
   useEffect(() => {
@@ -203,17 +207,16 @@ export default function ProfilePage() {
         setInventory(allItems);
         setTransactions(allTxs.sort((a, b) => b.timestamp - a.timestamp));
 
-        // Reputation Score Calculation (includes reviews)
+        // Reputation Score Calculation (includes reviews, NOT cancels)
         // Import reviews for this seller
         const { getSellerAverageRating } = await import('@/lib/reviews');
         const { average: reviewAvg, count: reviewCount } = getSellerAverageRating(profileAddress);
 
-        // Base: 50, +5 per sale, -5 per cancel, +review bonus (scales with review count)
+        // Base: 50, +5 per sale, +review bonus (cancels do NOT affect reputation)
         const salesBonus = totalSales * 5;
-        const cancelPenalty = totalCancels * 5;
         const reviewBonus = reviewCount > 0 ? Math.round((reviewAvg - 3) * 10) : 0; // +20 max for 5 stars, -20 for 1 star
 
-        const score = Math.min(100, Math.max(0, 50 + salesBonus - cancelPenalty + reviewBonus));
+        const score = Math.min(100, Math.max(0, 50 + salesBonus + reviewBonus));
         setReputation(score);
 
       } finally {
@@ -236,6 +239,56 @@ export default function ProfilePage() {
     } catch (e) {
       console.warn('Failed to load profile settings:', e);
     }
+  }, [profileAddress]);
+
+  // Load favorites from localStorage
+  useEffect(() => {
+    if (!connectedAddress || !isOwnProfile) return;
+    const favs = getFavorites(connectedAddress);
+    setFavorites(favs);
+  }, [connectedAddress, isOwnProfile]);
+
+  // Fetch listings (items where seller == profileAddress)
+  useEffect(() => {
+    if (!profileAddress) return;
+
+    const fetchListings = async () => {
+      const allListings: any[] = [];
+
+      await Promise.all(SUPPORTED_CHAINS.map(async (chain) => {
+        const client = createPublicClient({ chain, transport: http() });
+        const contractAddr = CONTRACT_ADDRESSES[chain.id];
+        if (!contractAddr) return;
+
+        try {
+          const rawItems = await client.readContract({
+            address: contractAddr,
+            abi: PAYLOCK_ABI,
+            functionName: 'getMarketplaceItems',
+          }) as any[];
+
+          // Filter to items where seller matches profile address
+          const sellerItems = rawItems.filter((item: any) =>
+            item.seller?.toLowerCase() === profileAddress.toLowerCase() &&
+            !item.isCanceled
+          );
+
+          for (const item of sellerItems) {
+            allListings.push({
+              ...item,
+              chainId: chain.id,
+              chainName: chain.name,
+            });
+          }
+        } catch (err) {
+          console.error(`Error fetching listings from ${chain.name}:`, err);
+        }
+      }));
+
+      setListings(allListings);
+    };
+
+    fetchListings();
   }, [profileAddress]);
 
   // Handlers
@@ -270,7 +323,11 @@ export default function ProfilePage() {
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-blue-500 to-primary"></div>
 
             <div className="w-32 h-32 rounded-xl bg-black ring-4 ring-white/5 shadow-neon mb-4 overflow-hidden flex items-center justify-center">
-              {displayAvatar ? <img src={displayAvatar} className="w-full h-full object-cover" /> : <User className="w-12 h-12 text-primary/50" />}
+              <img
+                src={settings.avatarUrl || ensAvatar || getUserAvatar(profileAddress)}
+                alt="Profile Avatar"
+                className="w-full h-full object-cover"
+              />
             </div>
 
             <h1 className="text-2xl font-bold text-white mb-1 tracking-tight truncate w-full">{settings.displayName || "Time Traveler"}</h1>
@@ -304,6 +361,8 @@ export default function ProfilePage() {
             {/* Dynamic tabs based on privacy settings */}
             {(() => {
               const tabs = ['LISTINGS'];
+              // FAVORITES only for own profile
+              if (isOwnProfile) tabs.push('FAVORITES');
               // Only show INVENTORY if own profile or privacy not set
               if (isOwnProfile || !settings.hideInventory) tabs.push('INVENTORY');
               // Only show TRANSACTIONS if own profile or privacy not set
@@ -319,15 +378,75 @@ export default function ProfilePage() {
           {/* 0. LISTINGS TAB (Seller's Products) */}
           {activeTab === 'LISTINGS' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <p className="text-xs text-white/40 mb-4">Items listed for sale by this user</p>
+              <p className="text-xs text-white/40 mb-4">Items listed for sale by this user ({listings.length})</p>
               {isLoading ? (
                 <div className="py-20 text-center"><RefreshCw className="animate-spin mx-auto text-primary" /></div>
-              ) : (
+              ) : listings.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Listed items would be fetched separately - showing placeholder */}
-                  <div className="text-center py-12 text-white/30 font-mono text-xs col-span-full border border-dashed border-white/10 rounded-xl">
-                    Listed items appear here
-                  </div>
+                  {listings.map((item, i) => (
+                    <a
+                      key={i}
+                      href={`/item/${item.id}?chain=${item.chainId}`}
+                      className="flex items-center gap-4 p-4 rounded-xl bg-[#0b1a24]/60 border border-white/5 hover:border-primary/30 hover:bg-white/5 transition-all group"
+                    >
+                      <div className="size-12 rounded-lg bg-gradient-to-br from-primary/20 to-blue-500/20 flex items-center justify-center text-primary">
+                        <Tag size={20} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">{item.name}</p>
+                        <p className="text-xs text-white/40 font-mono">{formatEther(item.price)} {item.chainId === 55931 ? 'ETH' : 'ETH'}</p>
+                      </div>
+                      <div className="text-white/30 group-hover:text-primary transition-colors">
+                        <ExternalLink size={16} />
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-white/30 font-mono text-xs col-span-full border border-dashed border-white/10 rounded-xl">
+                  No items listed for sale
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* FAVORITES TAB (Only for own profile) */}
+          {activeTab === 'FAVORITES' && isOwnProfile && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <p className="text-xs text-white/40 mb-4">Your bookmarked items ({favorites.length})</p>
+              {favorites.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {favorites.map((fav, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-4 p-4 rounded-xl bg-[#0b1a24]/60 border border-white/5 hover:border-primary/30 hover:bg-white/5 transition-all group"
+                    >
+                      <a href={`/item/${fav.itemId}?chain=${fav.chainId}`} className="flex items-center gap-4 flex-1">
+                        <div className="size-12 rounded-lg bg-gradient-to-br from-red-500/20 to-pink-500/20 flex items-center justify-center text-red-400">
+                          <Tag size={20} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">{fav.name}</p>
+                          <p className="text-xs text-white/40 font-mono">{formatEther(fav.price)} ETH</p>
+                        </div>
+                      </a>
+                      <button
+                        onClick={() => {
+                          const { removeFavorite } = require('@/lib/favorites');
+                          removeFavorite(connectedAddress!, fav.itemId, fav.chainId);
+                          setFavorites(prev => prev.filter(f => !(f.itemId === fav.itemId && f.chainId === fav.chainId)));
+                        }}
+                        className="p-2 rounded-lg text-red-400 hover:bg-red-500/20 transition-all"
+                        title="Remove from favorites"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-white/30 font-mono text-xs border border-dashed border-white/10 rounded-xl">
+                  No favorites yet. Click the heart icon on items to add them!
                 </div>
               )}
             </div>
@@ -433,14 +552,37 @@ export default function ProfilePage() {
                       placeholder="Your public name"
                     />
                   </div>
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1.5">Avatar URL</label>
-                    <input
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all"
-                      value={settings.avatarUrl}
-                      onChange={e => setSettings({ ...settings, avatarUrl: e.target.value })}
-                      placeholder="https://example.com/avatar.png"
-                    />
+                  <div className="md:col-span-2">
+                    <label className="text-xs text-gray-400 block mb-1.5 flex items-center gap-2">
+                      <Camera size={12} /> Avatar
+                    </label>
+                    {/* Avatar Selection Grid */}
+                    <div className="grid grid-cols-6 gap-2 mb-3 p-3 bg-black/40 border border-white/10 rounded-xl">
+                      {ANIME_AVATARS.map((url, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setSettings({ ...settings, avatarUrl: url })}
+                          className={cn(
+                            "size-12 rounded-lg overflow-hidden border-2 transition-all hover:scale-105",
+                            settings.avatarUrl === url
+                              ? "border-primary shadow-neon"
+                              : "border-transparent hover:border-white/30"
+                          )}
+                        >
+                          <img src={url} alt={`Avatar ${i + 1}`} className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                    {/* Custom URL Input */}
+                    <div className="relative">
+                      <input
+                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all"
+                        value={settings.avatarUrl}
+                        onChange={e => setSettings({ ...settings, avatarUrl: e.target.value })}
+                        placeholder="Or paste custom avatar URL..."
+                      />
+                    </div>
                   </div>
                 </div>
                 <div>

@@ -23,7 +23,7 @@ export function Footer() {
   };
 
   return (
-    <footer className="w-full mt-auto border-t border-white/10 bg-gradient-to-b from-[#020e14] to-[#010810] relative z-10">
+    <footer className="w-full mt-auto border-t border-white/10 glass-card relative z-10">
       {/* Main Footer Content */}
       <div className="max-w-[1440px] mx-auto px-6 py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 lg:gap-8">
@@ -33,8 +33,8 @@ export function Footer() {
             {/* Logo & Tagline */}
             <div>
               <Link href="/" className="flex items-center gap-2 group">
-                <div className="size-10 rounded-xl bg-gradient-to-br from-primary via-cyan-400 to-blue-600 flex items-center justify-center shadow-[0_0_20px_rgba(0,229,255,0.3)] group-hover:shadow-[0_0_30px_rgba(0,229,255,0.5)] transition-all">
-                  <Zap className="text-black" size={20} />
+                <div className="size-10 btn-glass-circle flex items-center justify-center text-primary group-hover:shadow-glow-primary transition-all">
+                  <Zap size={20} />
                 </div>
                 <span className="text-xl font-black tracking-tight text-white">
                   CHRO<span className="text-primary">NOS</span>
@@ -58,16 +58,16 @@ export function Footer() {
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     placeholder="Enter your email"
-                    className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder:text-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none transition-all"
+                    className="w-full pl-10 pr-4 py-3 glass-input text-sm"
                   />
                 </div>
                 <button
                   type="submit"
                   className={cn(
-                    "px-4 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2",
+                    "px-4 py-3 rounded-full font-bold text-sm transition-all flex items-center gap-2",
                     subscribed
                       ? "bg-green-500/20 text-green-400 border border-green-500/20"
-                      : "bg-primary text-black hover:bg-white"
+                      : "btn-glass-primary"
                   )}
                 >
                   {subscribed ? 'Subscribed!' : <Send size={16} />}
@@ -84,28 +84,28 @@ export function Footer() {
                 href="https://x.com/runicsorcerer"
                 target="_blank"
                 rel="noreferrer"
-                className="size-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all"
+                className="size-10 btn-glass-circle text-white/50 hover:text-primary hover:shadow-glow-primary transition-all"
                 title="Twitter/X"
               >
                 <Twitter size={18} />
               </a>
               <a
                 href="#"
-                className="size-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all"
+                className="size-10 btn-glass-circle text-white/50 hover:text-primary hover:shadow-glow-primary transition-all"
                 title="Discord"
               >
                 <MessageCircle size={18} />
               </a>
               <a
                 href="#"
-                className="size-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all"
+                className="size-10 btn-glass-circle text-white/50 hover:text-primary hover:shadow-glow-primary transition-all"
                 title="GitHub"
               >
                 <Github size={18} />
               </a>
               <a
                 href="#"
-                className="size-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all"
+                className="size-10 btn-glass-circle text-white/50 hover:text-primary hover:shadow-glow-primary transition-all"
                 title="Website"
               >
                 <Globe size={18} />
@@ -248,8 +248,8 @@ export function Footer() {
         </div>
       </div>
 
-      {/* Decorative Background Glow */}
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[200px] bg-gradient-radial from-primary/5 via-transparent to-transparent blur-3xl pointer-events-none" />
+      {/* Subtle accent */}
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[400px] h-[100px] bg-primary/5 blur-3xl pointer-events-none" />
     </footer>
   );
 }

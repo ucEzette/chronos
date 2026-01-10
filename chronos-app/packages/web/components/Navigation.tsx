@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { arcTestnet, datahaven } from "@/lib/chains";
 import { CartButton } from "./CartDrawer";
+import { getUserAvatar } from "@/lib/avatars";
 
 export function Navigation() {
   const { address, isConnected, chain } = useAccount();
@@ -25,6 +26,7 @@ export function Navigation() {
   const router = useRouter();
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
+  const [userAvatar, setUserAvatar] = useState<string>("");
 
   // Refs for click-outside handling
   const networkMenuRef = useRef<HTMLDivElement>(null);
@@ -88,6 +90,27 @@ export function Navigation() {
     return () => { document.body.style.overflow = ''; };
   }, [isMobileMenuOpen]);
 
+  // Load user's avatar from localStorage
+  useEffect(() => {
+    if (address) {
+      try {
+        const saved = localStorage.getItem(`chronos_profile_${address}`);
+        if (saved) {
+          const settings = JSON.parse(saved);
+          if (settings.avatarUrl) {
+            setUserAvatar(settings.avatarUrl);
+          } else {
+            setUserAvatar(getUserAvatar(address));
+          }
+        } else {
+          setUserAvatar(getUserAvatar(address));
+        }
+      } catch {
+        setUserAvatar(getUserAvatar(address));
+      }
+    }
+  }, [address]);
+
   const handleProfileClick = useCallback(() => {
     if (isConnected && address) router.push(`/profile/${address}`);
     else setIsConnectOpen(true);
@@ -137,7 +160,7 @@ export function Navigation() {
       <header className={cn(
         "sticky top-0 z-50 w-full transition-all duration-500 ease-out border-b",
         scrolled || isMobileMenuOpen
-          ? "bg-[#020e14]/90 backdrop-blur-xl border-primary/10 py-3 shadow-[0_4px_30px_rgba(0,229,255,0.1)]"
+          ? "glass-card border-primary/20 py-3 shadow-glass"
           : "bg-transparent border-transparent py-4 md:py-6"
       )}>
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12">
@@ -151,7 +174,7 @@ export function Navigation() {
               <img
                 src="/chronos-logo.png"
                 alt="Chronos Logo"
-                className="h-10 md:h-14 w-auto object-contain transition-all duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_8px_rgba(0,229,255,0.5)]"
+                className="h-10 md:h-14 w-auto object-contain transition-all duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_8px_rgba(0,206,209,0.5)]"
               />
             </div>
 
@@ -294,13 +317,17 @@ export function Navigation() {
                       onClick={handleProfileClick}
                     >
                       <div className="flex items-center gap-3 justify-end">
+                        {/* User Avatar */}
+                        <div className="size-9 rounded-lg overflow-hidden border border-white/10">
+                          <img src={userAvatar || getUserAvatar(address!)} alt="Avatar" className="w-full h-full object-cover" />
+                        </div>
                         <div className="text-right">
                           <div className="flex items-center gap-2 justify-end">
                             <span className="text-[10px] text-gray-400 font-mono group-hover/wallet:text-primary/80 transition-colors">BAL:</span>
                             <span className="text-xs font-mono font-bold text-white">{balance ? Number(balance.formatted).toFixed(3) : "0.00"} {currencySymbol}</span>
                           </div>
                           <div className="flex items-center gap-2 justify-end mt-0.5">
-                            <span className="size-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_6px_rgba(0,229,255,0.8)]" />
+                            <span className="size-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_6px_rgba(0,206,209,0.8)]" />
                             <p className="text-[10px] font-mono font-bold text-primary/80">{address?.slice(0, 6)}...{address?.slice(-4)}</p>
                           </div>
                         </div>
@@ -313,7 +340,7 @@ export function Navigation() {
 
                     <button
                       onClick={handleDisconnect}
-                      className="size-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 hover:bg-red-500/20 hover:border-red-500/40 hover:scale-105 active:scale-95 transition-all"
+                      className="size-10 btn-glass-circle text-red-400 hover:text-red-300 hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] transition-all"
                       title="Disconnect Wallet"
                     >
                       <LogOut size={16} />
@@ -322,7 +349,7 @@ export function Navigation() {
                 ) : (
                   <button
                     onClick={() => setIsConnectOpen(true)}
-                    className="bg-primary hover:bg-cyan-400 text-black px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-[0_0_20px_rgba(0,229,255,0.3)] hover:shadow-[0_0_30px_rgba(0,229,255,0.5)] transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+                    className="btn-glass-primary px-6 py-2.5 text-xs font-bold uppercase tracking-wider hover:scale-105 active:scale-95 flex items-center gap-2"
                   >
                     <Wallet size={14} /> Connect
                   </button>
