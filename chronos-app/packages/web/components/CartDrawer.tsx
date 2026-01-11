@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { formatEther } from 'viem';
 import { useCart } from './CartContext';
 import { cn } from '@/lib/utils';
+import { getCurrencySymbol } from '@/lib/currency';
 import {
     ShoppingCart, X, Trash2, Plus, Minus, ArrowRight, Package
 } from 'lucide-react';
@@ -128,7 +129,7 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                                             {formatEther(item.price * BigInt(item.quantity))}
                                         </p>
                                         <p className="text-[10px] text-white/40">
-                                            {item.chainId === 55931 ? 'MOCK' : 'USDC'}
+                                            {getCurrencySymbol(item.chainId)}
                                         </p>
                                     </div>
                                 </div>
@@ -147,7 +148,7 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                                 <p className="text-xl font-bold text-white font-mono">
                                     {formatEther(totalPrice)}
                                 </p>
-                                <p className="text-[10px] text-white/40">Mixed currencies</p>
+                                <p className="text-[10px] text-white/40">Mixed currencies (by chain)</p>
                             </div>
                         </div>
 

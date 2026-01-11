@@ -136,8 +136,8 @@ const MarketplaceCard = memo(function MarketplaceCard({ item, viewMode = 'grid' 
   // Load favorite state from localStorage on mount
   useEffect(() => {
     if (address) {
-      const { isFavorited } = require('@/lib/favorites');
-      const favorited = isFavorited(address, item.id.toString(), item.chainId);
+      const { isFavoritedSync } = require('@/lib/favorites');
+      const favorited = isFavoritedSync(address, item.id.toString(), item.chainId);
       setIsFav(favorited);
     }
   }, [address, item.id, item.chainId]);
@@ -382,8 +382,8 @@ const MarketplaceCard = memo(function MarketplaceCard({ item, viewMode = 'grid' 
           e.preventDefault();
           e.stopPropagation();
           if (address) {
-            const { toggleFavorite } = require('@/lib/favorites');
-            const newState = toggleFavorite(address, {
+            const { toggleFavoriteSync } = require('@/lib/favorites');
+            const newState = toggleFavoriteSync(address, {
               itemId: item.id.toString(),
               chainId: item.chainId,
               name: item.name,

@@ -210,7 +210,7 @@ export default function ProfilePage() {
         // Reputation Score Calculation (includes reviews, NOT cancels)
         // Import reviews for this seller
         const { getSellerAverageRating } = await import('@/lib/reviews');
-        const { average: reviewAvg, count: reviewCount } = getSellerAverageRating(profileAddress);
+        const { average: reviewAvg, count: reviewCount } = await getSellerAverageRating(profileAddress);
 
         // Base: 50, +5 per sale, +review bonus (cancels do NOT affect reputation)
         const salesBonus = totalSales * 5;
