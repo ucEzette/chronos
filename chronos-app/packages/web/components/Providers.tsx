@@ -48,16 +48,16 @@ export const config = createConfig({
     // Injected connector (detects browser wallet - Phantom, Rabby, etc.)
     injected({ shimDisconnect: true }),
     // MetaMask specific
-    metaMask({ dappMetadata: { name: "ONEWAY" } }),
+    metaMask({ dappMetadata: { name: "ONEROAD" } }),
     // WalletConnect for mobile and other wallets
     walletConnect({
       projectId: WALLETCONNECT_PROJECT_ID,
       showQrModal: true,
       metadata: {
-        name: "ONEWAY",
+        name: "ONEROAD",
         description: "Decentralized Digital Marketplace",
-        url: "https://oneway.app",
-        icons: ["https://oneway.app/oneway-logo.jpg"]
+        url: "https://oneroad.app",
+        icons: ["https://oneroad.app/oneroad-logo.jpg"]
       }
     }),
   ],

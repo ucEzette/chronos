@@ -29,7 +29,7 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'oneway_notifications';
+const STORAGE_KEY = 'oneroad_notifications';
 
 // Convert DB notification to app notification
 function dbToNotification(db: DbNotification): Notification {

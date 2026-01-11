@@ -61,7 +61,7 @@ export default function LandingPage() {
                     className="absolute inset-0 w-full h-full object-cover"
                     style={{ opacity: 0.5, filter: 'brightness(1.3) contrast(1.1)' }}
                 >
-                    <source src="/oneway.mp4" type="video/mp4" />
+                    <source src="/oneroad.mp4" type="video/mp4" />
                 </video>
                 <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/50 to-background" />
             </div>
@@ -71,13 +71,13 @@ export default function LandingPage() {
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
                         <Image
-                            src="/oneway-logo.jpg"
-                            alt="Oneway Logo"
+                            src="/oneroad-logo.jpg"
+                            alt="Oneroad Logo"
                             width={40}
                             height={40}
                             className="rounded-lg"
                         />
-                        <span className="text-xl font-extrabold tracking-tight font-display">ONEWAY</span>
+                        <span className="text-xl font-extrabold tracking-tight font-display">ONEROAD</span>
                     </div>
 
                     {/* Desktop Nav */}
@@ -156,8 +156,8 @@ export default function LandingPage() {
                     <div className={`relative group transition-all duration-700 delay-200 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'} hidden lg:flex items-center justify-center`}>
                         <div className="absolute -inset-8 bg-primary/20 rounded-full blur-3xl opacity-30 group-hover:opacity-50 transition-opacity" />
                         <Image
-                            src="/oneway-logo.jpg"
-                            alt="Oneway Mascot"
+                            src="/oneroad-logo.jpg"
+                            alt="Oneroad Mascot"
                             width={400}
                             height={400}
                             className="rounded-3xl border-2 border-primary/30 shadow-[0_0_60px_rgba(19,236,218,0.3)]"

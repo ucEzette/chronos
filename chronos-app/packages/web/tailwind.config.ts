@@ -10,7 +10,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Oneway Color Palette - matches logo background
+        // Oneroad Color Palette - matches logo background
         primary: {
           DEFAULT: "#13ecda",
           dark: "#0fc5b8",

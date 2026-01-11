@@ -1,4 +1,4 @@
-// Anime Avatar System for ONEWAY
+// Anime Avatar System for ONEROAD
 // Features anime fight characters like Naruto, villains, and popular anime characters
 
 // Array of anime fight character avatar URLs from reliable CDNs

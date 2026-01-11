@@ -77,7 +77,7 @@ function SplashScreen({ onEnter }: { onEnter: () => void }) {
 
       <div className="relative z-10 flex flex-col items-center w-full max-w-sm">
         <h1 className="text-4xl md:text-5xl font-black tracking-[0.2em] mb-6 text-transparent bg-clip-text bg-gradient-to-b from-white to-primary drop-shadow-[0_0_10px_rgba(0,229,255,0.5)] text-center">
-          ONEWAY
+          ONEROAD
         </h1>
 
         {!loaded ? (
@@ -792,7 +792,7 @@ export default function MarketplacePage() {
             </div>
             <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-white leading-none tracking-tighter">
               ENCRYPTED <br className="md:hidden" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-cyan-400 to-secondary">ONEWAY</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-cyan-400 to-secondary">ONEROAD</span>
             </h1>
             <p className="text-white/60 max-w-xl text-sm leading-relaxed">
               Secure peer-to-peer file transfer protocol. Buy and sell encrypted digital assets.

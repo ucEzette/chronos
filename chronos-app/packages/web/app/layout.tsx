@@ -10,18 +10,18 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
-  title: "ONEWAY | Decentralized Digital Marketplace",
+  title: "ONEROAD | Decentralized Digital Marketplace",
   description: "Secure peer-to-peer encrypted file trading on the blockchain. Buy and sell digital assets with confidence.",
   keywords: ["marketplace", "crypto", "NFT", "decentralized", "encrypted", "files", "blockchain"],
-  authors: [{ name: "ONEWAY" }],
+  authors: [{ name: "ONEROAD" }],
   icons: {
     icon: [
-      { url: '/oneway-logo.jpg', type: 'image/jpeg' },
+      { url: '/oneroad-logo.jpg', type: 'image/jpeg' },
     ],
-    apple: '/oneway-logo.jpg',
+    apple: '/oneroad-logo.jpg',
   },
   openGraph: {
-    title: "ONEWAY | Decentralized Digital Marketplace",
+    title: "ONEROAD | Decentralized Digital Marketplace",
     description: "Secure peer-to-peer encrypted file trading on the blockchain.",
     type: "website",
   },
