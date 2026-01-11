@@ -1,9 +1,9 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WagmiProvider, createConfig, http } from "wagmi";
+import { WagmiProvider, createConfig, http, createStorage } from "wagmi";
 import { metaMask, injected, walletConnect } from "wagmi/connectors";
-import { ReactNode } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { type Chain } from "viem";
 import { CartProvider } from "./CartContext";
 import { NotificationProvider } from "./NotificationContext";
@@ -62,9 +62,24 @@ export const config = createConfig({
     }),
   ],
   transports: {
-    [datahaven.id]: http(),
-    [arcTestnet.id]: http(),
+    // Reduce polling to prevent rate limiting (429 errors)
+    [datahaven.id]: http(undefined, {
+      batch: true,
+      retryCount: 3,
+      retryDelay: 1000,
+    }),
+    [arcTestnet.id]: http(undefined, {
+      batch: true,
+      retryCount: 3,
+      retryDelay: 1000,
+    }),
   },
+  // Reduce polling frequency to prevent rate limiting
+  pollingInterval: 30_000, // 30 seconds instead of default 4 seconds
+  // Persist wallet connection in localStorage
+  storage: createStorage({
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+  }),
   ssr: true,
 });
 

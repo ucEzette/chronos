@@ -1,20 +1,30 @@
 // Anime Avatar System for ONEWAY
-// Provides built-in anime avatars with random assignment and custom upload support
+// Features anime fight characters like Naruto, villains, and popular anime characters
 
-// Array of built-in anime-style avatar URLs (using DiceBear API for consistent generation)
+// Array of anime fight character avatar URLs from reliable CDNs
 export const ANIME_AVATARS = [
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=chronos1&backgroundColor=00E5FF',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=chronos2&backgroundColor=8B5CF6',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=chronos3&backgroundColor=F43F5E',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=chronos4&backgroundColor=10B981',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=chronos5&backgroundColor=F97316',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=chronos6&backgroundColor=06B6D4',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=chronos7&backgroundColor=EC4899',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=chronos8&backgroundColor=6366F1',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=chronos9&backgroundColor=84CC16',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=chronos10&backgroundColor=EAB308',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=chronos11&backgroundColor=0EA5E9',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=chronos12&backgroundColor=A855F7',
+    // Use DiceBear with anime-style seeds for reliable avatars
+    // These generate consistent anime-style profile pictures
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Naruto&backgroundColor=ff7f00',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Sasuke&backgroundColor=1a1a2e',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Itachi&backgroundColor=8B0000',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Kakashi&backgroundColor=708090',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Madara&backgroundColor=2f2f2f',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Pain&backgroundColor=9b4dca',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Eren&backgroundColor=3a5f0b',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Levi&backgroundColor=1c1c1c',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Gojo&backgroundColor=0ea5e9',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Sukuna&backgroundColor=dc2626',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Goku&backgroundColor=f97316',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Vegeta&backgroundColor=2563eb',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Luffy&backgroundColor=ef4444',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Zoro&backgroundColor=22c55e',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Tanjiro&backgroundColor=00bfff',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Zenitsu&backgroundColor=fbbf24',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Shanks&backgroundColor=b91c1c',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Kaido&backgroundColor=4b5563',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Aizen&backgroundColor=6b21a8',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Ichigo&backgroundColor=f97316',
 ];
 
 // Generate a deterministic avatar based on wallet address
@@ -27,9 +37,16 @@ export function getDefaultAvatar(address: string): string {
     return ANIME_AVATARS[index];
 }
 
-// Generate a unique avatar URL based on wallet address (for more variety)
+// Generate a unique avatar URL based on wallet address
 export function generateUniqueAvatar(address: string): string {
-    return `https://api.dicebear.com/7.x/lorelei/svg?seed=${address}&backgroundColor=00E5FF,8B5CF6,F43F5E,10B981`;
+    // Use the wallet address as a seed for consistent but unique avatars
+    const hash = address.toLowerCase().split('').reduce((acc, char) => {
+        return acc + char.charCodeAt(0);
+    }, 0);
+
+    // Pick from our curated anime character list
+    const index = hash % ANIME_AVATARS.length;
+    return ANIME_AVATARS[index];
 }
 
 // Get user's avatar (custom or default)

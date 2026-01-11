@@ -351,6 +351,62 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* Bio Section */}
+            {settings.bio && (
+              <div className="w-full mb-4 px-1">
+                <p className="text-xs text-gray-400 mb-2 uppercase font-bold">About</p>
+                <p className="text-sm text-white/70 leading-relaxed">{settings.bio}</p>
+              </div>
+            )}
+
+            {/* Social Links */}
+            {(settings.twitterHandle || settings.discord || settings.website || settings.github) && (
+              <div className="w-full mb-4 space-y-2">
+                <p className="text-xs text-gray-400 uppercase font-bold px-1">Connect</p>
+                <div className="flex flex-wrap gap-2">
+                  {settings.twitterHandle && (
+                    <a
+                      href={`https://twitter.com/${settings.twitterHandle}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-500/10 text-blue-400 text-xs font-medium hover:bg-blue-500/20 transition-all"
+                    >
+                      <Twitter size={12} />
+                      @{settings.twitterHandle}
+                    </a>
+                  )}
+                  {settings.discord && (
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-medium">
+                      <MessageCircle size={12} />
+                      {settings.discord}
+                    </span>
+                  )}
+                  {settings.website && (
+                    <a
+                      href={settings.website.startsWith('http') ? settings.website : `https://${settings.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-all"
+                    >
+                      <Globe size={12} />
+                      Website
+                    </a>
+                  )}
+                  {settings.github && (
+                    <a
+                      href={`https://github.com/${settings.github}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-500/10 text-gray-400 text-xs font-medium hover:bg-gray-500/20 transition-all"
+                    >
+                      <Code size={12} />
+                      {settings.github}
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
             {isOwnProfile && <button onClick={() => { if (confirm("Disconnect?")) { disconnect(); router.push("/"); } }} className="w-full py-3 px-4 bg-black/40 hover:bg-red-900/20 border border-white/10 hover:border-red-500/50 text-gray-400 hover:text-red-400 rounded-lg transition-all text-xs font-mono flex items-center justify-center gap-2 group uppercase tracking-widest"><Power size={16} /> Disconnect</button>}
           </div>
         </aside>

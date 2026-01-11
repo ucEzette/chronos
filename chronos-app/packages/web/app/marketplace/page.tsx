@@ -133,6 +133,15 @@ const MarketplaceCard = memo(function MarketplaceCard({ item, viewMode = 'grid' 
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
+  // Load favorite state from localStorage on mount
+  useEffect(() => {
+    if (address) {
+      const { isFavorited } = require('@/lib/favorites');
+      const favorited = isFavorited(address, item.id.toString(), item.chainId);
+      setIsFav(favorited);
+    }
+  }, [address, item.id, item.chainId]);
+
   // Generate placeholder description based on file type and name
   const getPlaceholderDescription = (itemName: string, fileType: string) => {
     const type = fileType?.replace('.', '').toUpperCase() || 'FILE';
@@ -739,8 +748,17 @@ export default function MarketplacePage() {
     });
 
     const sorted = [...items];
-    if (sort === "NEWEST") sorted.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    else if (sort === "OLDEST") sorted.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    if (sort === "NEWEST") sorted.sort((a, b) => {
+      // Use timestamp if available, otherwise use item ID (higher ID = newer)
+      const aTime = a.timestamp || Number(a.id) || 0;
+      const bTime = b.timestamp || Number(b.id) || 0;
+      return bTime - aTime;
+    });
+    else if (sort === "OLDEST") sorted.sort((a, b) => {
+      const aTime = a.timestamp || Number(a.id) || 0;
+      const bTime = b.timestamp || Number(b.id) || 0;
+      return aTime - bTime;
+    });
     else if (sort === "PRICE_LOW") sorted.sort((a, b) => Number(a.price) - Number(b.price));
     else if (sort === "PRICE_HIGH") sorted.sort((a, b) => Number(b.price) - Number(a.price));
 

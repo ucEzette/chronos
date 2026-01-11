@@ -41,6 +41,7 @@ export default function ItemDetailsPage() {
   const [copied, setCopied] = useState(false);
   const [waitingForKey, setWaitingForKey] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   const { addToCart, isInCart } = useCart();
 
@@ -346,12 +347,35 @@ export default function ItemDetailsPage() {
               })()}
             </div>
 
-            <div className="p-6 rounded-xl bg-white/5 border border-white/10">
-              <h3 className="text-sm font-bold uppercase text-gray-400 mb-3 flex items-center gap-2"><FileText size={14} /> Artifact Manifest</h3>
-              <p className="text-gray-300 leading-relaxed text-sm">
-                {meta?.description || item.description || "No description provided."}
-              </p>
-            </div>
+            {/* Collapsible Description */}
+            {(() => {
+              const description = meta?.description || item.description || "No description provided.";
+              const isLong = description.length > 200;
+              const displayText = isDescriptionExpanded || !isLong ? description : description.slice(0, 200) + "...";
+
+              return (
+                <div className="p-6 rounded-xl bg-white/5 border border-white/10">
+                  <h3 className="text-sm font-bold uppercase text-gray-400 mb-3 flex items-center gap-2">
+                    <FileText size={14} /> Artifact Manifest
+                  </h3>
+                  <p className="text-gray-300 leading-relaxed text-sm whitespace-pre-wrap">
+                    {displayText}
+                  </p>
+                  {isLong && (
+                    <button
+                      onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                      className="mt-3 text-primary text-xs font-bold hover:underline transition-all flex items-center gap-1"
+                    >
+                      {isDescriptionExpanded ? (
+                        <>Show Less ↑</>
+                      ) : (
+                        <>Read More ↓</>
+                      )}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 rounded-xl bg-black/40 border border-white/10 text-center">
