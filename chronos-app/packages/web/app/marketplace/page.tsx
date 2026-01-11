@@ -1165,7 +1165,7 @@ export default function MarketplacePage() {
             {/* Grid/List View */}
             <div className={cn(
               displayMode === 'grid'
-                ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6 auto-rows-fr pb-20"
+                ? "grid grid-cols-2 xl:grid-cols-3 gap-3 md:gap-6 auto-rows-fr pb-20"
                 : "flex flex-col gap-3 pb-20"
             )}>
               {isLoading && allItems.length === 0 ? (

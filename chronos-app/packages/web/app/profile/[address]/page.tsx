@@ -460,21 +460,31 @@ export default function ProfilePage() {
 
         {/* MAIN CONTENT */}
         <div className="flex-1 flex flex-col gap-6 min-w-0 order-2 lg:order-none">
-          <div className="flex overflow-x-auto pb-2 scrollbar-hide gap-1 border-b border-white/10">
+          <div className="flex overflow-x-auto pb-2 scrollbar-hide gap-1 border-b border-white/10 -mx-4 px-4 sm:mx-0 sm:px-0">
             {/* Dynamic tabs based on privacy settings */}
             {(() => {
-              const tabs = ['LISTINGS'];
-              // FAVORITES only for own profile
-              if (isOwnProfile) tabs.push('FAVORITES');
-              // Only show INVENTORY if own profile or privacy not set
-              if (isOwnProfile || !settings.hideInventory) tabs.push('INVENTORY');
-              // Only show TRANSACTIONS if own profile or privacy not set
-              if (isOwnProfile || !settings.hideTransactions) tabs.push('TRANSACTIONS');
-              // Settings only for own profile
-              if (isOwnProfile) tabs.push('SETTINGS');
+              const tabs = [
+                { id: 'LISTINGS', label: 'List', fullLabel: 'Listings' },
+                ...(isOwnProfile ? [{ id: 'FAVORITES', label: 'Favs', fullLabel: 'Favorites' }] : []),
+                ...((isOwnProfile || !settings.hideInventory) ? [{ id: 'INVENTORY', label: 'Inv', fullLabel: 'Inventory' }] : []),
+                ...((isOwnProfile || !settings.hideTransactions) ? [{ id: 'TRANSACTIONS', label: 'Txns', fullLabel: 'Transactions' }] : []),
+                ...(isOwnProfile ? [{ id: 'SETTINGS', label: 'Set', fullLabel: 'Settings' }] : []),
+              ];
               return tabs;
             })().map((tab) => (
-              <button key={tab} onClick={() => setActiveTab(tab as any)} className={cn("px-6 py-3 rounded-t-lg font-bold text-xs tracking-wide transition-all border-t border-x", activeTab === tab ? "bg-primary text-black border-primary shadow-[0_-4px_20px_-5px_rgba(0,229,255,0.3)] relative z-10" : "bg-[#0f172a] text-gray-400 hover:text-white border-white/5 hover:bg-white/5")}>{tab}</button>
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  "px-3 sm:px-6 py-2.5 sm:py-3 rounded-t-lg font-bold text-[10px] sm:text-xs tracking-wide transition-all border-t border-x whitespace-nowrap flex-shrink-0",
+                  activeTab === tab.id
+                    ? "bg-primary text-black border-primary shadow-[0_-4px_20px_-5px_rgba(0,229,255,0.3)] relative z-10"
+                    : "bg-[#0f172a] text-gray-400 hover:text-white border-white/5 hover:bg-white/5"
+                )}
+              >
+                <span className="sm:hidden">{tab.label}</span>
+                <span className="hidden sm:inline">{tab.fullLabel}</span>
+              </button>
             ))}
           </div>
 
@@ -485,7 +495,7 @@ export default function ProfilePage() {
               {isLoading ? (
                 <div className="py-20 text-center"><RefreshCw className="animate-spin mx-auto text-primary" /></div>
               ) : listings.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   {listings.map((item, i) => (
                     <a
                       key={i}
@@ -518,7 +528,7 @@ export default function ProfilePage() {
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <p className="text-xs text-white/40 mb-4">Your bookmarked items ({favorites.length})</p>
               {favorites.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   {favorites.map((fav, i) => (
                     <div
                       key={i}

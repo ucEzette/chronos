@@ -254,7 +254,7 @@ export default function LandingPage() {
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
                         {STEPS.map((step, i) => {
                             const Icon = step.icon;
                             return (
@@ -370,23 +370,24 @@ export default function LandingPage() {
                         </Link>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Horizontal scrollable on mobile */}
+                    <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:gap-6 sm:overflow-visible">
                         {CREATORS.map((creator, i) => (
-                            <div key={i} className="glass-card glass-card-hover rounded-2xl p-6 border border-white/10">
+                            <div key={i} className="flex-shrink-0 w-[160px] sm:w-auto glass-card glass-card-hover rounded-2xl p-4 sm:p-6 border border-white/10 snap-start">
                                 <div className="flex flex-col items-center text-center">
-                                    <div className="relative mb-4">
-                                        <div className="size-20 rounded-full bg-primary/20 flex items-center justify-center text-2xl font-bold text-primary">
+                                    <div className="relative mb-3 sm:mb-4">
+                                        <div className="size-14 sm:size-20 rounded-full bg-primary/20 flex items-center justify-center text-xl sm:text-2xl font-bold text-primary">
                                             {creator.name.charAt(0)}
                                         </div>
-                                        <div className="absolute bottom-0 right-0 bg-primary text-background size-6 rounded-full flex items-center justify-center">
-                                            <Shield size={12} />
+                                        <div className="absolute bottom-0 right-0 bg-primary text-background size-5 sm:size-6 rounded-full flex items-center justify-center">
+                                            <Shield size={10} />
                                         </div>
                                     </div>
-                                    <h4 className="text-lg font-black italic">{creator.name}</h4>
-                                    <p className="text-xs text-slate-500 mb-6">{creator.role}</p>
-                                    <div className="w-full pt-4 border-t border-white/5">
-                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Total Earned</p>
-                                        <p className="text-xl font-black text-primary">{creator.earned}</p>
+                                    <h4 className="text-sm sm:text-lg font-black italic truncate w-full">{creator.name}</h4>
+                                    <p className="text-[10px] sm:text-xs text-slate-500 mb-4 sm:mb-6">{creator.role}</p>
+                                    <div className="w-full pt-3 sm:pt-4 border-t border-white/5">
+                                        <p className="text-[8px] sm:text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Total Earned</p>
+                                        <p className="text-lg sm:text-xl font-black text-primary">{creator.earned}</p>
                                     </div>
                                 </div>
                             </div>
