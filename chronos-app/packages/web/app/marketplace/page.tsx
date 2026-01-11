@@ -749,14 +749,27 @@ export default function MarketplacePage() {
 
     const sorted = [...items];
     if (sort === "NEWEST") sorted.sort((a, b) => {
-      // Use timestamp if available, otherwise use item ID (higher ID = newer)
-      const aTime = a.timestamp || Number(a.id) || 0;
-      const bTime = b.timestamp || Number(b.id) || 0;
+      // Primary: Use item ID (highest ID = newest, this is reliable)
+      // Items are created sequentially, so higher ID = more recent
+      const aId = Number(a.id) || 0;
+      const bId = Number(b.id) || 0;
+      // If same chain, compare by ID directly
+      if (a.chainId === b.chainId) {
+        return bId - aId;
+      }
+      // Different chains: use timestamp if available, otherwise ID
+      const aTime = a.timestamp || aId;
+      const bTime = b.timestamp || bId;
       return bTime - aTime;
     });
     else if (sort === "OLDEST") sorted.sort((a, b) => {
-      const aTime = a.timestamp || Number(a.id) || 0;
-      const bTime = b.timestamp || Number(b.id) || 0;
+      const aId = Number(a.id) || 0;
+      const bId = Number(b.id) || 0;
+      if (a.chainId === b.chainId) {
+        return aId - bId;
+      }
+      const aTime = a.timestamp || aId;
+      const bTime = b.timestamp || bId;
       return aTime - bTime;
     });
     else if (sort === "PRICE_LOW") sorted.sort((a, b) => Number(a.price) - Number(b.price));
