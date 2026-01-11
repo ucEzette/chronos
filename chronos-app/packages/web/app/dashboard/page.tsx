@@ -218,7 +218,7 @@ export default function DashboardPage() {
       let storedKey = localKeys[item.name.trim()];
 
       if (!storedKey) {
-        const signature = await signMessageAsync({ message: `CHRONOS_ACCESS:${item.name.trim()}` });
+        const signature = await signMessageAsync({ message: `ONEWAY_ACCESS:${item.name.trim()}` });
         storedKey = signatureToKey(signature);
       }
 

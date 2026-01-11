@@ -13,6 +13,7 @@ import {
 import { arcTestnet, datahaven } from "@/lib/chains";
 import { CartButton } from "./CartDrawer";
 import { getUserAvatar } from "@/lib/avatars";
+import { NotificationBell } from "./NotificationBell";
 
 export function Navigation() {
   const { address, isConnected, chain } = useAccount();
@@ -168,30 +169,31 @@ export function Navigation() {
 
             {/* BRAND */}
             <div
-              className="flex items-center cursor-pointer group z-50"
+              className="flex items-center gap-2 cursor-pointer group z-50"
               onClick={() => router.push("/")}
             >
               <img
-                src="/chronos-logo.png"
-                alt="Chronos Logo"
-                className="h-10 md:h-14 w-auto object-contain transition-all duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_8px_rgba(0,206,209,0.5)]"
+                src="/oneway-logo.jpg"
+                alt="Oneway Logo"
+                className="h-10 md:h-12 w-auto object-contain rounded-lg transition-all duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_8px_rgba(19,236,218,0.5)]"
               />
+              <span className="hidden sm:block text-lg font-extrabold tracking-tight font-display">ONEWAY</span>
             </div>
 
             {/* Desktop Nav - Using Link for instant prefetched navigation */}
             <nav className="hidden lg:flex gap-8 text-xs font-bold uppercase tracking-widest">
               <Link
-                href="/"
+                href="/marketplace"
                 prefetch={true}
                 className={cn(
                   "relative py-2 transition-colors hover:text-primary group",
-                  pathname === "/" && "text-primary"
+                  pathname === "/marketplace" && "text-primary"
                 )}
               >
                 Market
                 <span className={cn(
                   "absolute bottom-0 left-0 h-0.5 bg-primary transition-all duration-300",
-                  pathname === "/" ? "w-full" : "w-0 group-hover:w-full"
+                  pathname === "/marketplace" ? "w-full" : "w-0 group-hover:w-full"
                 )} />
               </Link>
 
@@ -227,6 +229,9 @@ export function Navigation() {
 
             {/* Wallet Section */}
             <div className="flex items-center gap-2 md:gap-4">
+              {/* Notification Bell - visible on both mobile and desktop */}
+              <NotificationBell />
+
               {/* Mobile: Simple Connect/Connected indicator */}
               <div className="flex md:hidden items-center gap-2">
                 {isConnected ? (
@@ -422,11 +427,11 @@ export function Navigation() {
               {/* Navigation - Horizontal Row */}
               <div className="flex gap-2 mb-4">
                 <Link
-                  href="/"
+                  href="/marketplace"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={cn(
                     "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold uppercase",
-                    pathname === "/" ? "bg-primary text-black" : "bg-white/5 text-white/70"
+                    pathname === "/marketplace" ? "bg-primary text-black" : "bg-white/5 text-white/70"
                   )}
                 >
                   <ShoppingCart size={16} /> Market

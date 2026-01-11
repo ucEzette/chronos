@@ -1,4 +1,4 @@
-// Anime Avatar System for CHRONOS
+// Anime Avatar System for ONEWAY
 // Provides built-in anime avatars with random assignment and custom upload support
 
 // Array of built-in anime-style avatar URLs (using DiceBear API for consistent generation)

@@ -416,7 +416,7 @@ export default function CreateListingPage() {
          setStatus('SIGNING_KEY');
 
          // 2. Encryption Key Signature (Chronos Logic)
-         const signature = await signMessageAsync({ message: `CHRONOS_ACCESS:${formData.name.trim()}` });
+         const signature = await signMessageAsync({ message: `ONEWAY_ACCESS:${formData.name.trim()}` });
          const secureKey = signatureToKey(signature);
 
          // Store key locally for the seller to re-download their own item later

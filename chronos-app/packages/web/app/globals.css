@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Grenze Gotisch - Variable Font */
+/* Grenze Gotisch - Variable Font (Legacy) */
 @font-face {
   font-family: 'Grenze Gotisch';
   src: url('/GrenzeGotisch-VariableFont_wght.ttf') format('truetype-variations');
@@ -12,114 +12,105 @@
 }
 
 :root {
-  --background: #1a2332;
-  --background-dark: #0f1621;
-  --background-light: #3d4a5c;
-  --primary: #00CED1;
-  --primary-dark: #00A8AB;
-  --primary-light: #40E0D0;
-  --primary-glow: rgba(0, 206, 209, 0.5);
-  --glass-white: rgba(255, 255, 255, 0.08);
-  --glass-border: rgba(255, 255, 255, 0.15);
-  --glass-highlight: rgba(255, 255, 255, 0.25);
+  --primary: #13ecda;
+  --primary-dark: #0fc5b8;
+  --primary-glow: rgba(19, 236, 218, 0.5);
+  --background: #050505;
+  --background-dark: #000000;
+  --surface: #0a0e14;
+  --glass-white: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.08);
 }
 
 @layer base {
   body {
-    @apply text-white;
-    background: linear-gradient(135deg, #1a2332 0%, #2a3444 50%, #3d4a5c 100%);
-    min-height: 100vh;
+    font-family: 'Manrope', 'Switzer', sans-serif;
+    background-color: #050505;
+    color: white;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'Sora', 'Space Grotesk', sans-serif;
   }
 }
 
 /* ============================================
-   GLASSMORPHISM BUTTON STYLES
-   Based on reference images - frosted glass with edge highlights
+   ONE ROAD BUTTON STYLES
+   Primary button with cyan glow effect
    ============================================ */
 
-/* Glass Button - Pill Shape */
-.btn-glass {
-  position: relative;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 9999px;
-  box-shadow:
-    0 8px 32px 0 rgba(0, 0, 0, 0.3),
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
-  transition: all 0.3s ease;
-  color: rgba(255, 255, 255, 0.9);
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 2rem;
+  background-color: #13ecda;
+  color: #102220;
+  font-weight: 900;
+  font-size: 1rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 0 20px rgba(19, 236, 218, 0.3);
+  transition: all 0.2s ease;
 }
 
-.btn-glass:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.25);
-  box-shadow:
-    0 12px 40px 0 rgba(0, 0, 0, 0.4),
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
-  transform: translateY(-1px);
+.btn-primary:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 30px rgba(19, 236, 218, 0.5);
 }
 
-/* Glass Button with Turquoise Glow */
-.btn-glass-primary {
-  position: relative;
-  background: rgba(0, 206, 209, 0.15);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 206, 209, 0.3);
-  border-radius: 9999px;
-  box-shadow:
-    0 8px 32px 0 rgba(0, 206, 209, 0.2),
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
-  transition: all 0.3s ease;
-  color: #00CED1;
+.btn-primary:active {
+  transform: scale(0.98);
 }
 
-.btn-glass-primary:hover {
-  background: rgba(0, 206, 209, 0.25);
-  border-color: rgba(0, 206, 209, 0.5);
-  box-shadow:
-    0 0 25px rgba(0, 206, 209, 0.4),
-    0 12px 40px 0 rgba(0, 206, 209, 0.3),
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
-  transform: translateY(-1px);
+/* Secondary/Ghost Button */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 2rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  font-weight: 700;
+  font-size: 1rem;
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
 }
 
-/* Glass Circle Button (Icon buttons) */
-.btn-glass-circle {
-  position: relative;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 50%;
-  box-shadow:
-    0 4px 16px 0 rgba(0, 0, 0, 0.25),
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
-  transition: all 0.3s ease;
-  color: rgba(255, 255, 255, 0.8);
+.btn-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
-.btn-glass-circle:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.25);
-  transform: scale(1.05);
+/* Large Buttons */
+.btn-lg {
+  height: 3.5rem;
+  padding: 0 2rem;
+  font-size: 1.125rem;
+}
+
+.btn-xl {
+  height: 4rem;
+  padding: 0 2.5rem;
+  font-size: 1.25rem;
+  border-radius: 1rem;
 }
 
 /* ============================================
-   GLASS CARD STYLES
+   GLASS CARD STYLES (One Road)
    ============================================ */
 
 .glass-card {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  box-shadow:
-    0 8px 32px 0 rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .glass-card-hover {
@@ -127,66 +118,77 @@
 }
 
 .glass-card-hover:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(0, 206, 209, 0.3);
-  box-shadow:
-    0 12px 40px 0 rgba(0, 0, 0, 0.4),
-    0 0 20px rgba(0, 206, 209, 0.1),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
-  transform: translateY(-2px);
-}
-
-/* ============================================
-   GLASS INPUT STYLES
-   ============================================ */
-
-.glass-input {
   background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.2);
-  transition: all 0.3s ease;
-  color: white;
-}
-
-.glass-input:focus {
-  outline: none;
-  border-color: rgba(0, 206, 209, 0.5);
-  box-shadow:
-    inset 0 2px 4px 0 rgba(0, 0, 0, 0.2),
-    0 0 15px rgba(0, 206, 209, 0.2);
-}
-
-.glass-input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  border-color: rgba(19, 236, 218, 0.3);
 }
 
 /* ============================================
-   GLOW UTILITIES
+   BENTO GRID
    ============================================ */
 
-.shadow-glow-primary {
-  box-shadow: 0 0 15px rgba(0, 206, 209, 0.4);
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.5rem;
 }
 
-.shadow-glow-turquoise {
-  box-shadow: 0 0 20px rgba(0, 206, 209, 0.5), 0 0 40px rgba(0, 206, 209, 0.3);
-}
+/* ============================================
+   STATUS BADGE (Pulsing dot)
+   ============================================ */
 
-/* Glowing progress bar (like the slider reference) */
-.glow-bar {
-  background: linear-gradient(90deg, #00CED1, #40E0D0);
-  box-shadow: 0 0 15px rgba(0, 206, 209, 0.6), 0 0 30px rgba(0, 206, 209, 0.4);
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
   border-radius: 9999px;
+  background-color: rgba(19, 236, 218, 0.1);
+  border: 1px solid rgba(19, 236, 218, 0.2);
+  color: #13ecda;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.status-dot {
+  position: relative;
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+.status-dot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-color: #13ecda;
+  animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.status-dot::after {
+  content: '';
+  position: relative;
+  display: block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background-color: #13ecda;
+}
+
+@keyframes ping {
+
+  75%,
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
 }
 
 /* ============================================
    UTILITY ANIMATIONS
    ============================================ */
 
-/* MARQUEE FOOTER ANIMATION */
 @keyframes marquee {
   0% {
     transform: translateX(0);
@@ -203,7 +205,6 @@
   animation: marquee 30s linear infinite;
 }
 
-/* BUTTON SHINE EFFECT */
 @keyframes shine {
   0% {
     transform: translateX(-100%) rotate(30deg);
@@ -232,33 +233,10 @@
   height: 200%;
   background: linear-gradient(to right,
       rgba(255, 255, 255, 0) 0%,
-      rgba(255, 255, 255, 0.3) 50%,
+      rgba(255, 255, 255, 0.2) 50%,
       rgba(255, 255, 255, 0) 100%);
   transform: rotate(30deg);
   animation: shine 3s infinite;
-}
-
-/* EQUALIZER BARS */
-@keyframes equalize {
-  0% {
-    height: 20%;
-    opacity: 0.3;
-  }
-
-  50% {
-    height: 100%;
-    opacity: 1;
-    box-shadow: 0 0 8px currentColor;
-  }
-
-  100% {
-    height: 20%;
-    opacity: 0.3;
-  }
-}
-
-.bar {
-  animation: equalize 1s infinite;
 }
 
 /* ============================================
@@ -306,7 +284,6 @@ html {
   display: none;
 }
 
-/* Shimmer animation for loading states */
 @keyframes shimmer {
   0% {
     transform: translateX(-100%);
@@ -319,4 +296,12 @@ html {
 
 .animate-shimmer {
   animation: shimmer 1.5s infinite;
+}
+
+/* ============================================
+   MATERIAL SYMBOLS STYLING
+   ============================================ */
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }

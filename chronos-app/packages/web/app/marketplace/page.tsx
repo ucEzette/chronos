@@ -77,7 +77,7 @@ function SplashScreen({ onEnter }: { onEnter: () => void }) {
 
       <div className="relative z-10 flex flex-col items-center w-full max-w-sm">
         <h1 className="text-4xl md:text-5xl font-black tracking-[0.2em] mb-6 text-transparent bg-clip-text bg-gradient-to-b from-white to-primary drop-shadow-[0_0_10px_rgba(0,229,255,0.5)] text-center">
-          CHRONOS
+          ONEWAY
         </h1>
 
         {!loaded ? (
@@ -602,6 +602,8 @@ export default function MarketplacePage() {
   const [displayMode, setDisplayMode] = useState<'grid' | 'list'>('grid');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [priceRange, setPriceRange] = useState({ min: '', max: '' });
 
   // Prices Ticker
   useEffect(() => {
@@ -772,7 +774,7 @@ export default function MarketplacePage() {
             </div>
             <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-white leading-none tracking-tighter">
               ENCRYPTED <br className="md:hidden" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-cyan-400 to-secondary">CHRONOS</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-cyan-400 to-secondary">ONEWAY</span>
             </h1>
             <p className="text-white/60 max-w-xl text-sm leading-relaxed">
               Secure peer-to-peer file transfer protocol. Buy and sell encrypted digital assets.
@@ -919,100 +921,236 @@ export default function MarketplacePage() {
           </div>
         </div>
 
-        {/* Category Filter Bar */}
-        <div className="flex flex-wrap gap-2 mb-8">
-          <button
-            onClick={() => setCategoryFilter('ALL')}
-            className={cn(
-              "px-4 py-2 rounded-xl text-xs font-bold transition-all border whitespace-nowrap",
-              categoryFilter === 'ALL'
-                ? "bg-primary/20 text-primary border-primary"
-                : "bg-surface text-white/60 border-white/10 hover:border-white/30"
-            )}
-          >
-            All Categories
-          </button>
-          {(showAllCategories ? CATEGORIES : CATEGORIES.slice(0, 6)).map((cat) => {
-            const Icon = cat.icon;
-            return (
-              <button
-                key={cat.id}
-                onClick={() => setCategoryFilter(cat.id)}
-                className={cn(
-                  "px-3 py-2 rounded-xl text-xs font-bold transition-all border whitespace-nowrap flex items-center gap-1.5",
-                  categoryFilter === cat.id
-                    ? "bg-primary/20 text-primary border-primary"
-                    : "bg-surface text-white/60 border-white/10 hover:border-white/30"
-                )}
-              >
-                <Icon size={12} /> {cat.name}
-              </button>
-            );
-          })}
-          {CATEGORIES.length > 6 && (
-            <button
-              onClick={() => setShowAllCategories(!showAllCategories)}
-              className="px-3 py-2 rounded-xl text-xs font-bold transition-all border whitespace-nowrap flex items-center gap-1.5 bg-white/5 text-white/60 border-white/10 hover:border-primary/50 hover:text-primary"
-            >
-              <ChevronDown size={12} className={cn("transition-transform", showAllCategories && "rotate-180")} />
-              {showAllCategories ? 'Show Less' : `+${CATEGORIES.length - 6} More`}
-            </button>
-          )}
-        </div>
-
-        {/* Results Count */}
-        {!isLoading && (
-          <div className="flex items-center justify-between mb-4 text-xs font-mono text-white/40">
-            <span>{filteredItems.length} artifact{filteredItems.length !== 1 ? 's' : ''} found</span>
-            {search && (
-              <span>Filtering by: "{search}"</span>
-            )}
-          </div>
-        )}
-
-        {/* Grid/List View */}
-        <div className={cn(
-          displayMode === 'grid'
-            ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 auto-rows-fr pb-20"
-            : "flex flex-col gap-3 pb-20"
-        )}>
-          {isLoading && allItems.length === 0 ? (
-            // Skeleton Loading State
-            <>
-              {[...Array(8)].map((_, i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </>
-          ) : filteredItems.length > 0 ? (
-            filteredItems.map((item, i) => (
-              <MarketplaceCard key={`${item.chainId}-${item.id}-${i}`} item={item} viewMode={displayMode} />
-            ))
-          ) : (
-            // Empty State
-            <div className="col-span-full flex flex-col items-center justify-center py-32 text-center border-2 border-dashed border-white/10 rounded-2xl bg-white/5">
-              <div className="p-6 rounded-full bg-white/5 text-white/20 mb-6">
-                <Archive size={48} />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">No Artifacts Found</h3>
-              <p className="text-white/40 text-sm max-w-md mx-auto mb-6">
-                {view === 'ACTIVE'
-                  ? "No active listings found on any network."
-                  : view === 'SOLD'
-                    ? "No sold-out items found."
-                    : "No archived items found."
-                }
-              </p>
-              {(search || filter !== 'ALL') && (
+        {/* Main Content with Sidebar */}
+        <div className="flex gap-6">
+          {/* Left Sidebar Filter Panel */}
+          <aside className={cn(
+            "shrink-0 transition-all duration-300 hidden lg:block",
+            sidebarOpen ? "w-64" : "w-0 overflow-hidden"
+          )}>
+            <div className="sticky top-24 glass-card rounded-2xl border border-white/10 p-5 space-y-6">
+              {/* Sidebar Header */}
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-white flex items-center gap-2">
+                  <SlidersHorizontal size={16} className="text-primary" />
+                  Filters
+                </h3>
                 <button
-                  onClick={() => { setSearch(''); setFilter('ALL'); }}
-                  className="px-6 py-2 bg-primary/10 text-primary rounded-xl text-sm font-bold border border-primary/20 hover:bg-primary/20 transition-all"
+                  onClick={() => {
+                    setFilter('ALL');
+                    setCategoryFilter('ALL');
+                    setPriceRange({ min: '', max: '' });
+                    setSort('NEWEST');
+                  }}
+                  className="text-[10px] text-primary hover:underline"
                 >
-                  Clear Filters
+                  Clear All
                 </button>
+              </div>
+
+              {/* Category Filter */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-white/50 uppercase tracking-wider">Category</h4>
+                <div className="space-y-1 max-h-64 overflow-y-auto scrollbar-hide">
+                  <button
+                    onClick={() => setCategoryFilter('ALL')}
+                    className={cn(
+                      "w-full text-left px-3 py-2 rounded-lg text-sm transition-all",
+                      categoryFilter === 'ALL'
+                        ? "bg-primary/20 text-primary font-bold"
+                        : "text-white/60 hover:bg-white/5 hover:text-white"
+                    )}
+                  >
+                    All Categories
+                  </button>
+                  {CATEGORIES.map((cat) => {
+                    const Icon = cat.icon;
+                    return (
+                      <button
+                        key={cat.id}
+                        onClick={() => setCategoryFilter(cat.id)}
+                        className={cn(
+                          "w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center gap-2",
+                          categoryFilter === cat.id
+                            ? "bg-primary/20 text-primary font-bold"
+                            : "text-white/60 hover:bg-white/5 hover:text-white"
+                        )}
+                      >
+                        <Icon size={14} /> {cat.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Sort Options */}
+              <div className="space-y-3 pt-3 border-t border-white/10">
+                <h4 className="text-xs font-bold text-white/50 uppercase tracking-wider">Sort By</h4>
+                <div className="space-y-1">
+                  {[
+                    { value: 'NEWEST', label: 'Newest First' },
+                    { value: 'OLDEST', label: 'Oldest First' },
+                    { value: 'PRICE_LOW', label: 'Price: Low to High' },
+                    { value: 'PRICE_HIGH', label: 'Price: High to Low' }
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setSort(opt.value)}
+                      className={cn(
+                        "w-full text-left px-3 py-2 rounded-lg text-sm transition-all",
+                        sort === opt.value
+                          ? "bg-primary/20 text-primary font-bold"
+                          : "text-white/60 hover:bg-white/5 hover:text-white"
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Price Range */}
+              <div className="space-y-3 pt-3 border-t border-white/10">
+                <h4 className="text-xs font-bold text-white/50 uppercase tracking-wider">Price Range</h4>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    placeholder="Min"
+                    value={priceRange.min}
+                    onChange={(e) => setPriceRange({ ...priceRange, min: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-primary/50 outline-none"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Max"
+                    value={priceRange.max}
+                    onChange={(e) => setPriceRange({ ...priceRange, max: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-primary/50 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* File Type Filter */}
+              <div className="space-y-3 pt-3 border-t border-white/10">
+                <h4 className="text-xs font-bold text-white/50 uppercase tracking-wider">File Type</h4>
+                <div className="flex flex-wrap gap-2">
+                  {['ALL', 'MP3', 'MP4', 'PDF', 'ZIP', 'PNG'].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => setFilter(type)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                        filter === type
+                          ? "bg-primary text-background"
+                          : "bg-white/5 text-white/60 hover:bg-white/10"
+                      )}
+                    >
+                      {type === 'ALL' ? 'All' : `.${type}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* View Status */}
+              <div className="space-y-3 pt-3 border-t border-white/10">
+                <h4 className="text-xs font-bold text-white/50 uppercase tracking-wider">Status</h4>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => setView('ACTIVE')}
+                    className={cn(
+                      "w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center gap-2",
+                      view === 'ACTIVE'
+                        ? "bg-primary/20 text-primary font-bold"
+                        : "text-white/60 hover:bg-white/5 hover:text-white"
+                    )}
+                  >
+                    <TrendingUp size={14} /> Active Listings
+                  </button>
+                  <button
+                    onClick={() => setView('SOLD')}
+                    className={cn(
+                      "w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center gap-2",
+                      view === 'SOLD'
+                        ? "bg-white/20 text-white font-bold"
+                        : "text-white/60 hover:bg-white/5 hover:text-white"
+                    )}
+                  >
+                    <Package size={14} /> Sold Out
+                  </button>
+                  <button
+                    onClick={() => setView('ARCHIVED')}
+                    className={cn(
+                      "w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center gap-2",
+                      view === 'ARCHIVED'
+                        ? "bg-white/20 text-white font-bold"
+                        : "text-white/60 hover:bg-white/5 hover:text-white"
+                    )}
+                  >
+                    <Archive size={14} /> Archived
+                  </button>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          {/* Main Content Area */}
+          <div className="flex-1 min-w-0">
+
+            {/* Results Count */}
+            {!isLoading && (
+              <div className="flex items-center justify-between mb-4 text-xs font-mono text-white/40">
+                <span>{filteredItems.length} artifact{filteredItems.length !== 1 ? 's' : ''} found</span>
+                {search && (
+                  <span>Filtering by: "{search}"</span>
+                )}
+              </div>
+            )}
+
+            {/* Grid/List View */}
+            <div className={cn(
+              displayMode === 'grid'
+                ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6 auto-rows-fr pb-20"
+                : "flex flex-col gap-3 pb-20"
+            )}>
+              {isLoading && allItems.length === 0 ? (
+                // Skeleton Loading State
+                <>
+                  {[...Array(8)].map((_, i) => (
+                    <SkeletonCard key={i} />
+                  ))}
+                </>
+              ) : filteredItems.length > 0 ? (
+                filteredItems.map((item, i) => (
+                  <MarketplaceCard key={`${item.chainId}-${item.id}-${i}`} item={item} viewMode={displayMode} />
+                ))
+              ) : (
+                // Empty State
+                <div className="col-span-full flex flex-col items-center justify-center py-32 text-center border-2 border-dashed border-white/10 rounded-2xl bg-white/5">
+                  <div className="p-6 rounded-full bg-white/5 text-white/20 mb-6">
+                    <Archive size={48} />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">No Artifacts Found</h3>
+                  <p className="text-white/40 text-sm max-w-md mx-auto mb-6">
+                    {view === 'ACTIVE'
+                      ? "No active listings found on any network."
+                      : view === 'SOLD'
+                        ? "No sold-out items found."
+                        : "No archived items found."
+                    }
+                  </p>
+                  {(search || filter !== 'ALL') && (
+                    <button
+                      onClick={() => { setSearch(''); setFilter('ALL'); }}
+                      className="px-6 py-2 bg-primary/10 text-primary rounded-xl text-sm font-bold border border-primary/20 hover:bg-primary/20 transition-all"
+                    >
+                      Clear Filters
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
+          </div>{/* Close main content area div */}
+        </div>{/* Close sidebar flex container */}
       </main>
 
       <Footer />

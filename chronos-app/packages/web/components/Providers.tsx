@@ -6,6 +6,7 @@ import { metaMask, injected, walletConnect } from "wagmi/connectors";
 import { ReactNode } from "react";
 import { type Chain } from "viem";
 import { CartProvider } from "./CartContext";
+import { NotificationProvider } from "./NotificationContext";
 
 // WalletConnect Project ID (get one at https://cloud.walletconnect.com/)
 const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "demo";
@@ -47,16 +48,16 @@ export const config = createConfig({
     // Injected connector (detects browser wallet - Phantom, Rabby, etc.)
     injected({ shimDisconnect: true }),
     // MetaMask specific
-    metaMask({ dappMetadata: { name: "CHRONOS" } }),
+    metaMask({ dappMetadata: { name: "ONEWAY" } }),
     // WalletConnect for mobile and other wallets
     walletConnect({
       projectId: WALLETCONNECT_PROJECT_ID,
       showQrModal: true,
       metadata: {
-        name: "CHRONOS",
+        name: "ONEWAY",
         description: "Decentralized Digital Marketplace",
-        url: "https://chronos.app",
-        icons: ["https://chronos.app/chronos-logo.png"]
+        url: "https://oneway.app",
+        icons: ["https://oneway.app/oneway-logo.jpg"]
       }
     }),
   ],
@@ -73,9 +74,11 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <CartProvider>
-          {children}
-        </CartProvider>
+        <NotificationProvider>
+          <CartProvider>
+            {children}
+          </CartProvider>
+        </NotificationProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

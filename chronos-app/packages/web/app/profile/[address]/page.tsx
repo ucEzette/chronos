@@ -574,6 +574,28 @@ export default function ProfilePage() {
                         </button>
                       ))}
                     </div>
+                    {/* File Upload from Computer */}
+                    <div className="flex gap-2 mb-3">
+                      <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-primary/10 border border-primary/30 rounded-xl text-sm text-primary font-bold cursor-pointer hover:bg-primary/20 transition-all">
+                        <Upload size={16} />
+                        Upload from Computer
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setSettings({ ...settings, avatarUrl: reader.result as string });
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
                     {/* Custom URL Input */}
                     <div className="relative">
                       <input
