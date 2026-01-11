@@ -362,7 +362,68 @@ export default function CreateListingPage() {
 
    const currencySymbol = chain?.id === 5042002 ? "USDC" : "MOCK";
 
-   useEffect(() => { setMounted(true); }, []);
+   const DRAFT_STORAGE_KEY = 'oneroad_listing_draft';
+
+   // Load saved draft from localStorage on mount
+   useEffect(() => {
+      setMounted(true);
+
+      // Restore saved form data
+      try {
+         const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
+         if (saved) {
+            const draft = JSON.parse(saved);
+            setFormData(prev => ({
+               ...prev,
+               name: draft.name || "",
+               description: draft.description || "",
+               price: draft.price || "",
+               maxSupply: draft.maxSupply || "1",
+               fileType: draft.fileType || ".DATA",
+               category: draft.category || "",
+               tags: draft.tags || [],
+               autoDeliver: draft.autoDeliver ?? true
+            }));
+            setBlurAmount(draft.blurAmount || 0);
+            setZoomLevel(draft.zoomLevel || 100);
+         }
+      } catch (e) {
+         console.warn('Failed to load draft:', e);
+      }
+   }, []);
+
+   // Auto-save form data to localStorage on change (debounced)
+   useEffect(() => {
+      if (!mounted) return;
+
+      const timeout = setTimeout(() => {
+         try {
+            const draft = {
+               name: formData.name,
+               description: formData.description,
+               price: formData.price,
+               maxSupply: formData.maxSupply,
+               fileType: formData.fileType,
+               category: formData.category,
+               tags: formData.tags,
+               autoDeliver: formData.autoDeliver,
+               blurAmount,
+               zoomLevel,
+               savedAt: Date.now()
+            };
+            localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+         } catch (e) {
+            console.warn('Failed to save draft:', e);
+         }
+      }, 500); // 500ms debounce
+
+      return () => clearTimeout(timeout);
+   }, [formData, blurAmount, zoomLevel, mounted]);
+
+   // Clear draft after successful publish
+   const clearDraft = useCallback(() => {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+   }, []);
 
    // Cleanup preview URL on unmount
    useEffect(() => {
@@ -486,6 +547,7 @@ export default function CreateListingPage() {
          });
 
          setStatus('SUCCESS');
+         clearDraft(); // Clear saved draft on success
          setToast({ message: "Listing Published Successfully!", type: 'success' });
          setTimeout(() => router.push("/dashboard"), 2000);
 
@@ -777,6 +839,33 @@ export default function CreateListingPage() {
                      setZoomLevel={setZoomLevel}
                   />
                </div>
+            </div>
+
+            {/* Bottom Publish Button - Easy access without scrolling */}
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 pb-6">
+               <button
+                  onClick={handlePublish}
+                  disabled={isProcessing || !formData.name || !encryptedFile || !previewFile}
+                  className={cn(
+                     "w-full sm:w-auto group flex items-center justify-center gap-3 px-12 py-4 rounded-xl font-black uppercase tracking-wider text-lg transition-all",
+                     status === 'SUCCESS'
+                        ? "bg-green-500 text-black shadow-[0_0_30px_rgba(0,255,163,0.3)]"
+                        : isProcessing
+                           ? "bg-primary/50 text-black cursor-wait"
+                           : "bg-primary hover:bg-cyan-400 text-black shadow-[0_0_30px_rgba(0,229,255,0.3)] hover:shadow-[0_0_40px_rgba(0,229,255,0.5)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  )}
+               >
+                  {status === 'IDLE' && <><Rocket size={20} /> Publish Listing</>}
+                  {status === 'SIGNING_KEY' && <><KeyRound size={20} className="animate-pulse" /> Signing...</>}
+                  {status === 'UPLOADING' && <><UploadCloud size={20} className="animate-bounce" /> Uploading...</>}
+                  {status === 'TX' && <><Loader2 size={20} className="animate-spin" /> Minting...</>}
+                  {status === 'SUCCESS' && <><CheckCircle2 size={20} /> Success!</>}
+               </button>
+               {(!formData.name || !encryptedFile || !previewFile) && (
+                  <p className="text-xs text-white/40 text-center">
+                     Fill in all required fields to publish
+                  </p>
+               )}
             </div>
          </main>
 

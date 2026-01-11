@@ -57,7 +57,9 @@ export default function ProfilePage() {
   const [settings, setSettings] = useState({
     displayName: "", avatarUrl: "", twitterHandle: "", ghostMode: false,
     bio: "", discord: "", website: "", github: "",
-    hideInventory: false, hideTransactions: false
+    hideInventory: false, hideTransactions: false,
+    // OAuth verification status
+    twitterVerified: false, discordVerified: false, githubVerified: false
   });
   const [listings, setListings] = useState<any[]>([]); // Items listed by this seller
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]); // User's favorites
@@ -228,18 +230,62 @@ export default function ProfilePage() {
     fetchAllChainData();
   }, [profileAddress]);
 
-  // Load settings from localStorage on mount
+  // Load settings from localStorage and Supabase on mount
   useEffect(() => {
     if (!profileAddress) return;
-    try {
-      const saved = localStorage.getItem(`chronos_profile_${profileAddress}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setSettings(prev => ({ ...prev, ...parsed }));
+
+    const loadSettings = async () => {
+      try {
+        // Load from localStorage first
+        const saved = localStorage.getItem(`chronos_profile_${profileAddress}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setSettings(prev => ({ ...prev, ...parsed }));
+        }
+
+        // Then load verification status from Supabase
+        const { getUserProfile } = await import('@/lib/supabase');
+        const profile = await getUserProfile(profileAddress);
+        if (profile) {
+          setSettings(prev => ({
+            ...prev,
+            displayName: profile.displayName || prev.displayName,
+            avatarUrl: profile.avatarUrl || prev.avatarUrl,
+            bio: profile.bio || prev.bio,
+            twitterHandle: profile.twitter || prev.twitterHandle,
+            discord: profile.discord || prev.discord,
+            website: profile.website || prev.website,
+          }));
+        }
+
+        // Load verification status directly from Supabase
+        const { getSupabase, isSupabaseConfigured } = await import('@/lib/supabase');
+        if (isSupabaseConfigured()) {
+          const supabase = getSupabase();
+          if (supabase) {
+            const { data } = await supabase
+              .from('profiles')
+              .select('twitter_verified, discord_verified, github_verified, github')
+              .eq('wallet_address', profileAddress.toLowerCase())
+              .single();
+
+            if (data) {
+              setSettings(prev => ({
+                ...prev,
+                twitterVerified: data.twitter_verified || false,
+                discordVerified: data.discord_verified || false,
+                githubVerified: data.github_verified || false,
+                github: data.github || prev.github,
+              }));
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load profile settings:', e);
       }
-    } catch (e) {
-      console.warn('Failed to load profile settings:', e);
-    }
+    };
+
+    loadSettings();
   }, [profileAddress]);
 
   // Load favorites from localStorage
@@ -681,32 +727,90 @@ export default function ProfilePage() {
                 <h3 className="text-sm font-bold uppercase text-white/40 flex items-center gap-2">
                   <LinkIcon size={14} /> Social Links
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1.5 flex items-center gap-1.5">
-                      <Twitter size={12} /> Twitter/X Handle
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30">@</span>
+                <p className="text-xs text-white/40">Click "Verify" to connect your accounts via OAuth for a verified badge ✓</p>
+                <div className="grid grid-cols-1 gap-4">
+                  {/* Twitter */}
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-400 block mb-1.5 flex items-center gap-1.5">
+                        <Twitter size={12} /> Twitter/X
+                        {settings.twitterVerified && <span className="text-green-400 text-[10px] font-bold ml-1">✓ Verified</span>}
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30">@</span>
+                        <input
+                          className={cn(
+                            "w-full bg-black/40 border rounded-xl pl-8 pr-4 py-3 text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all",
+                            settings.twitterVerified ? "border-green-500/30" : "border-white/10"
+                          )}
+                          value={settings.twitterHandle}
+                          onChange={e => setSettings({ ...settings, twitterHandle: e.target.value.replace('@', '') })}
+                          placeholder="username"
+                          disabled={settings.twitterVerified}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => window.location.href = `/api/auth/twitter?wallet=${connectedAddress}`}
+                      className="px-4 py-3 bg-blue-400/10 border border-blue-400/30 text-blue-400 rounded-xl text-sm font-bold hover:bg-blue-400/20 transition-all whitespace-nowrap"
+                    >
+                      {settings.twitterVerified ? 'Re-verify' : 'Verify'}
+                    </button>
+                  </div>
+
+                  {/* Discord */}
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-400 block mb-1.5 flex items-center gap-1.5">
+                        <MessageCircle size={12} /> Discord
+                        {settings.discordVerified && <span className="text-green-400 text-[10px] font-bold ml-1">✓ Verified</span>}
+                      </label>
                       <input
-                        className="w-full bg-black/40 border border-white/10 rounded-xl pl-8 pr-4 py-3 text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all"
-                        value={settings.twitterHandle}
-                        onChange={e => setSettings({ ...settings, twitterHandle: e.target.value.replace('@', '') })}
+                        className={cn(
+                          "w-full bg-black/40 border rounded-xl px-4 py-3 text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all",
+                          settings.discordVerified ? "border-green-500/30" : "border-white/10"
+                        )}
+                        value={settings.discord || ''}
+                        onChange={e => setSettings({ ...settings, discord: e.target.value })}
                         placeholder="username"
+                        disabled={settings.discordVerified}
                       />
                     </div>
+                    <button
+                      onClick={() => window.location.href = `/api/auth/discord?wallet=${connectedAddress}`}
+                      className="px-4 py-3 bg-indigo-400/10 border border-indigo-400/30 text-indigo-400 rounded-xl text-sm font-bold hover:bg-indigo-400/20 transition-all whitespace-nowrap"
+                    >
+                      {settings.discordVerified ? 'Re-verify' : 'Verify'}
+                    </button>
                   </div>
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1.5 flex items-center gap-1.5">
-                      <MessageCircle size={12} /> Discord
-                    </label>
-                    <input
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all"
-                      value={settings.discord || ''}
-                      onChange={e => setSettings({ ...settings, discord: e.target.value })}
-                      placeholder="username#0000 or server link"
-                    />
+
+                  {/* GitHub */}
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-400 block mb-1.5 flex items-center gap-1.5">
+                        <Code size={12} /> GitHub
+                        {settings.githubVerified && <span className="text-green-400 text-[10px] font-bold ml-1">✓ Verified</span>}
+                      </label>
+                      <input
+                        className={cn(
+                          "w-full bg-black/40 border rounded-xl px-4 py-3 text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all",
+                          settings.githubVerified ? "border-green-500/30" : "border-white/10"
+                        )}
+                        value={settings.github || ''}
+                        onChange={e => setSettings({ ...settings, github: e.target.value })}
+                        placeholder="username"
+                        disabled={settings.githubVerified}
+                      />
+                    </div>
+                    <button
+                      onClick={() => window.location.href = `/api/auth/github?wallet=${connectedAddress}`}
+                      className="px-4 py-3 bg-gray-400/10 border border-gray-400/30 text-gray-300 rounded-xl text-sm font-bold hover:bg-gray-400/20 transition-all whitespace-nowrap"
+                    >
+                      {settings.githubVerified ? 'Re-verify' : 'Verify'}
+                    </button>
                   </div>
+
+                  {/* Website (manual input, no OAuth) */}
                   <div>
                     <label className="text-xs text-gray-400 block mb-1.5 flex items-center gap-1.5">
                       <Globe size={12} /> Website
@@ -716,17 +820,6 @@ export default function ProfilePage() {
                       value={settings.website || ''}
                       onChange={e => setSettings({ ...settings, website: e.target.value })}
                       placeholder="https://yoursite.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1.5 flex items-center gap-1.5">
-                      <Code size={12} /> GitHub
-                    </label>
-                    <input
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all"
-                      value={settings.github || ''}
-                      onChange={e => setSettings({ ...settings, github: e.target.value })}
-                      placeholder="username"
                     />
                   </div>
                 </div>

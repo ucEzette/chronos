@@ -44,6 +44,7 @@ const STEPS = [
 
 export default function LandingPage() {
     const [isLoaded, setIsLoaded] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     useEffect(() => {
         setIsLoaded(true);
@@ -53,53 +54,109 @@ export default function LandingPage() {
         <div className="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-background">
             {/* Video Background */}
             <div className="fixed inset-0 z-0 overflow-hidden">
+                {/* Optimized background video with lazy loading */}
                 <video
                     autoPlay
                     loop
                     muted
                     playsInline
+                    preload="metadata"
+                    poster="/oneroad-logo.jpg"
                     className="absolute inset-0 w-full h-full object-cover"
                     style={{ opacity: 0.5, filter: 'brightness(1.3) contrast(1.1)' }}
                 >
-                    <source src="/oneroad.mp4" type="video/mp4" />
+                    <source src="/oneway.webm" type="video/webm" />
                 </video>
                 <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/50 to-background" />
             </div>
 
             {/* Navigation */}
-            <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-background/90 backdrop-blur-md px-4 sm:px-6 md:px-16 py-4">
+            <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-background/90 backdrop-blur-md px-4 sm:px-6 md:px-16 py-3">
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
+                    {/* Logo */}
+                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => window.location.href = '/'}>
                         <Image
                             src="/oneroad-logo.jpg"
                             alt="Oneroad Logo"
-                            width={40}
-                            height={40}
+                            width={36}
+                            height={36}
                             className="rounded-lg"
                         />
-                        <span className="text-xl font-extrabold tracking-tight font-display">ONEROAD</span>
+                        <span className="text-lg sm:text-xl font-extrabold tracking-tight font-display">ONEROAD</span>
                     </div>
 
                     {/* Desktop Nav */}
-                    <nav className="hidden md:flex items-center gap-10">
+                    <nav className="hidden md:flex items-center gap-8">
                         <Link href="/marketplace" className="text-sm font-semibold hover:text-primary transition-colors">Marketplace</Link>
                         <Link href="/create-listing" className="text-sm font-semibold hover:text-primary transition-colors">Create</Link>
                         <a href="#how-it-works" className="text-sm font-semibold hover:text-primary transition-colors">How It Works</a>
                         <a href="#features" className="text-sm font-semibold hover:text-primary transition-colors">Features</a>
                     </nav>
 
-                    {/* Mobile Nav Links */}
-                    <div className="flex md:hidden items-center gap-3">
-                        <Link href="/marketplace" className="text-xs font-bold hover:text-primary transition-colors">Market</Link>
-                        <Link href="/create-listing" className="text-xs font-bold hover:text-primary transition-colors">Create</Link>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <Link href="/marketplace" className="btn-primary text-sm">
+                    {/* Desktop CTA */}
+                    <div className="hidden md:flex items-center gap-4">
+                        <Link href="/marketplace" className="btn-primary text-sm px-6 py-2.5">
                             Launch App
                         </Link>
                     </div>
+
+                    {/* Mobile: Hamburger Menu */}
+                    <div className="md:hidden flex items-center gap-2">
+                        <Link
+                            href="/marketplace"
+                            className="bg-primary text-black px-4 py-2 rounded-lg text-xs font-bold"
+                        >
+                            Launch
+                        </Link>
+                        <button
+                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                            className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                            aria-label="Toggle menu"
+                        >
+                            {mobileMenuOpen ? (
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                            ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12" /><line x1="4" x2="20" y1="6" y2="6" /><line x1="4" x2="20" y1="18" y2="18" /></svg>
+                            )}
+                        </button>
+                    </div>
                 </div>
+
+                {/* Mobile Dropdown Menu */}
+                {mobileMenuOpen && (
+                    <div className="md:hidden absolute top-full left-0 right-0 bg-background/95 backdrop-blur-xl border-b border-white/10 py-4 px-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <nav className="flex flex-col gap-2">
+                            <Link
+                                href="/marketplace"
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="py-3 px-4 rounded-lg text-sm font-semibold hover:bg-white/5 transition-colors"
+                            >
+                                Marketplace
+                            </Link>
+                            <Link
+                                href="/create-listing"
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="py-3 px-4 rounded-lg text-sm font-semibold hover:bg-white/5 transition-colors"
+                            >
+                                Create Listing
+                            </Link>
+                            <a
+                                href="#how-it-works"
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="py-3 px-4 rounded-lg text-sm font-semibold hover:bg-white/5 transition-colors"
+                            >
+                                How It Works
+                            </a>
+                            <a
+                                href="#features"
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="py-3 px-4 rounded-lg text-sm font-semibold hover:bg-white/5 transition-colors"
+                            >
+                                Features
+                            </a>
+                        </nav>
+                    </div>
+                )}
             </header>
 
             {/* Hero Section */}

@@ -7,6 +7,7 @@ import { ReactNode, useEffect } from "react";
 import { type Chain } from "viem";
 import { CartProvider } from "./CartContext";
 import { NotificationProvider } from "./NotificationContext";
+import { MobileBottomNav } from "./MobileBottomNav";
 
 // WalletConnect Project ID (get one at https://cloud.walletconnect.com/)
 const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "demo";
@@ -129,6 +130,7 @@ export function Providers({ children }: { children: ReactNode }) {
             <CartProvider>
               <NetworkGuard>
                 {children}
+                <MobileBottomNav />
               </NetworkGuard>
             </CartProvider>
           </NotificationProvider>

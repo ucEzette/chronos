@@ -273,6 +273,11 @@ html {
   body {
     overflow-x: hidden;
   }
+
+  /* Add padding for fixed bottom navigation */
+  main {
+    padding-bottom: 80px;
+  }
 }
 
 .scrollbar-hide {

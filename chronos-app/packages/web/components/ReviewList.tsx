@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { StarRating, ReviewCount } from './StarRating';
-import { getItemReviews, formatRelativeTime, type Review } from '@/lib/reviews';
+import { getItemReviewsSync, formatRelativeTime, type Review } from '@/lib/reviews';
 import { cn } from '@/lib/utils';
 import { MessageSquare, User } from 'lucide-react';
 
@@ -17,7 +17,7 @@ export function ReviewList({ itemId, chainId, limit }: ReviewListProps) {
     const [showAll, setShowAll] = useState(false);
 
     useEffect(() => {
-        setReviews(getItemReviews(itemId, chainId));
+        setReviews(getItemReviewsSync(itemId, chainId));
     }, [itemId, chainId]);
 
     if (reviews.length === 0) {
