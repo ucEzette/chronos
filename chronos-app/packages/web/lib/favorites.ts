@@ -1,7 +1,7 @@
 // Favorites System - Supabase with localStorage fallback
 import { getSupabase, isSupabaseConfigured } from './supabase';
 
-const FAVORITES_STORAGE_KEY = 'oneroad_favorites';
+const FAVORITES_STORAGE_KEY = 'chronos_favorites';
 
 export interface FavoriteItem {
     itemId: string;

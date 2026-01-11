@@ -13,7 +13,8 @@ import { decryptFile } from "@/lib/crypto";
 import { cn } from "@/lib/utils";
 import { ProfileInventory } from "../ProfileInventory";
 import { getUserAvatar, ANIME_AVATARS } from "@/lib/avatars";
-import { getFavorites, FavoriteItem } from "@/lib/favorites";
+import { getFavoritesSync, FavoriteItem } from "@/lib/favorites";
+import { getCurrencySymbol } from "@/lib/currency";
 import {
   Settings, Power, Copy, Wallet, Activity, Search,
   CheckCircle2, RefreshCw, Download, Music, Video, FileText, User,
@@ -244,7 +245,7 @@ export default function ProfilePage() {
   // Load favorites from localStorage
   useEffect(() => {
     if (!connectedAddress || !isOwnProfile) return;
-    const favs = getFavorites(connectedAddress);
+    const favs = getFavoritesSync(connectedAddress);
     setFavorites(favs);
   }, [connectedAddress, isOwnProfile]);
 
@@ -450,7 +451,7 @@ export default function ProfilePage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">{item.name}</p>
-                        <p className="text-xs text-white/40 font-mono">{formatEther(item.price)} {item.chainId === 55931 ? 'ETH' : 'ETH'}</p>
+                        <p className="text-xs text-white/40 font-mono">{formatEther(item.price)} {getCurrencySymbol(item.chainId)}</p>
                       </div>
                       <div className="text-white/30 group-hover:text-primary transition-colors">
                         <ExternalLink size={16} />
@@ -483,7 +484,7 @@ export default function ProfilePage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">{fav.name}</p>
-                          <p className="text-xs text-white/40 font-mono">{formatEther(fav.price)} ETH</p>
+                          <p className="text-xs text-white/40 font-mono">{formatEther(fav.price)} {getCurrencySymbol(fav.chainId)}</p>
                         </div>
                       </a>
                       <button
