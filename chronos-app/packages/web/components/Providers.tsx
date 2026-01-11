@@ -1,9 +1,9 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WagmiProvider, createConfig, http, createStorage } from "wagmi";
+import { WagmiProvider, createConfig, http, createStorage, useReconnect } from "wagmi";
 import { metaMask, injected, walletConnect } from "wagmi/connectors";
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useEffect } from "react";
 import { type Chain } from "viem";
 import { CartProvider } from "./CartContext";
 import { NotificationProvider } from "./NotificationContext";
@@ -41,14 +41,24 @@ const arcTestnet = {
   testnet: true,
 } as const satisfies Chain;
 
+// Create storage for persistence
+const storage = createStorage({
+  storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+  key: 'oneroad-wallet', // Unique key for this app
+});
+
 // 3. Configure Wagmi with BOTH Chains and Multiple Connectors
 export const config = createConfig({
   chains: [datahaven, arcTestnet],
   connectors: [
-    // Injected connector (detects browser wallet - Phantom, Rabby, etc.)
-    injected({ shimDisconnect: true }),
+    // Injected connector - DO NOT shimDisconnect to prevent unwanted disconnects
+    injected({
+      shimDisconnect: false, // CRITICAL: Prevents wallet from disconnecting on page reload
+    }),
     // MetaMask specific
-    metaMask({ dappMetadata: { name: "ONEROAD" } }),
+    metaMask({
+      dappMetadata: { name: "ONEROAD" },
+    }),
     // WalletConnect for mobile and other wallets
     walletConnect({
       projectId: WALLETCONNECT_PROJECT_ID,
@@ -65,35 +75,64 @@ export const config = createConfig({
     // Reduce polling to prevent rate limiting (429 errors)
     [datahaven.id]: http(undefined, {
       batch: true,
-      retryCount: 3,
-      retryDelay: 1000,
+      retryCount: 5,
+      retryDelay: 1500,
     }),
     [arcTestnet.id]: http(undefined, {
       batch: true,
-      retryCount: 3,
-      retryDelay: 1000,
+      retryCount: 5,
+      retryDelay: 1500,
     }),
   },
   // Reduce polling frequency to prevent rate limiting
-  pollingInterval: 30_000, // 30 seconds instead of default 4 seconds
-  // Persist wallet connection in localStorage
-  storage: createStorage({
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-  }),
+  pollingInterval: 30_000, // 30 seconds
+  // Persist wallet connection
+  storage,
+  // SSR support
   ssr: true,
+  // Sync connected chain with localStorage
+  syncConnectedChain: true,
 });
 
-const queryClient = new QueryClient();
+// Create a stable query client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000, // 1 minute
+      gcTime: 5 * 60_000, // 5 minutes (was cacheTime in v4)
+      retry: 2,
+    },
+  },
+});
+
+// Import NetworkGuard for auto network switching
+import { NetworkGuard } from './NetworkGuard';
+
+// Wallet reconnect component - uses hook inside WagmiProvider
+function WalletReconnect({ children }: { children: ReactNode }) {
+  const { reconnect } = useReconnect();
+
+  useEffect(() => {
+    // Attempt to reconnect on mount
+    reconnect();
+  }, [reconnect]);
+
+  return <>{children}</>;
+}
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <WagmiProvider config={config}>
+    <WagmiProvider config={config} reconnectOnMount={true}>
       <QueryClientProvider client={queryClient}>
-        <NotificationProvider>
-          <CartProvider>
-            {children}
-          </CartProvider>
-        </NotificationProvider>
+        <WalletReconnect>
+          <NotificationProvider>
+            <CartProvider>
+              <NetworkGuard>
+                {children}
+              </NetworkGuard>
+            </CartProvider>
+          </NotificationProvider>
+        </WalletReconnect>
       </QueryClientProvider>
     </WagmiProvider>
   );

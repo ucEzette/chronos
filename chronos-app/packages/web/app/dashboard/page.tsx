@@ -9,6 +9,7 @@ import { Footer } from "../../components/Footer";
 import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts";
 import { signatureToKey, decryptFile } from "@/lib/crypto";
 import { fetchIPFS } from "@/lib/ipfs";
+import { getSellerSettings } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { Terminal, Key, ShoppingBag, Plus, Archive, Coins, Shield, CheckCircle2, AlertCircle, X, Loader2, RefreshCw, Download, Clock, Ban, ArrowUpRight, ArrowDownLeft, Trash2 } from "lucide-react";
 
@@ -25,12 +26,34 @@ function Toast({ message, type, onClose }: { message: string, type: 'success' | 
 }
 
 const formatTimeAgo = (timestamp: number | undefined) => {
-  if (!timestamp) return "Pending...";
-  const diff = Math.floor((Date.now() - timestamp * 1000) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+  if (!timestamp || timestamp === 0) return "Pending...";
+
+  const date = new Date(timestamp * 1000);
+  const now = Date.now();
+  const diff = Math.floor((now - timestamp * 1000) / 1000);
+
+  // Format date as dd/mm/yyyy
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+  const formattedDate = `${day}/${month}/${year}`;
+
+  // Calculate relative time
+  let relativeTime: string;
+  if (diff < 60) {
+    relativeTime = `${diff} seconds ago`;
+  } else if (diff < 3600) {
+    const mins = Math.floor(diff / 60);
+    relativeTime = `${mins} ${mins === 1 ? 'minute' : 'minutes'} ago`;
+  } else if (diff < 86400) {
+    const hours = Math.floor(diff / 3600);
+    relativeTime = `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  } else {
+    const days = Math.floor(diff / 86400);
+    relativeTime = `${days} ${days === 1 ? 'day' : 'days'} ago`;
+  }
+
+  return `${formattedDate} (${relativeTime})`;
 };
 
 export default function DashboardPage() {
@@ -73,10 +96,53 @@ export default function DashboardPage() {
     query: { enabled: !!address && allItems.length > 0 }
   });
 
+  // Auto-deliver function
+  const autoDeliverKey = async (itemId: bigint, itemName: string, buyer: string) => {
+    if (!address) return;
+
+    try {
+      // Get settings from Supabase (with localStorage fallback)
+      const settings = await getSellerSettings(address, itemName);
+
+      // Check if auto-deliver is enabled
+      if (!settings.autoDeliver) return;
+
+      // Check if we have the key
+      if (!settings.encryptionKey) return;
+
+      // Deliver the key automatically
+      await writeContractAsync({
+        address: activeContract,
+        abi: PAYLOCK_ABI,
+        functionName: 'deliverKey',
+        args: [itemId, buyer, settings.encryptionKey] as any
+      });
+
+      setToast({ message: `Auto-delivered key for "${itemName}"`, type: 'success' });
+    } catch (e: any) {
+      console.error('Auto-deliver failed:', e);
+      setToast({ message: `Auto-deliver failed for "${itemName}"`, type: 'error' });
+    }
+  };
+
   // Watchers
   useWatchContractEvent({
     address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemPurchased',
-    onLogs: () => { refetchItems(); fetchHistory(); }
+    onLogs: (logs) => {
+      refetchItems();
+      fetchHistory();
+
+      // Check for auto-delivery
+      logs.forEach((log: any) => {
+        if (log.args?.id && log.args?.buyer) {
+          // Find the item to get its name
+          const item = allItems.find((i: any) => i.id.toString() === log.args.id.toString());
+          if (item && item.seller.toLowerCase() === address?.toLowerCase()) {
+            autoDeliverKey(log.args.id, item.name, log.args.buyer);
+          }
+        }
+      });
+    }
   });
   useWatchContractEvent({
     address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemCanceled',
@@ -93,9 +159,9 @@ export default function DashboardPage() {
     setLoadingHistory(true);
     try {
       const currentBlock = await publicClient.getBlockNumber();
-      // OPTIMIZATION: Reduced from 50000 to 5000 blocks for faster loading
-      const SCAN_DEPTH = BigInt(5000);
-      const CHUNK_SIZE = BigInt(2000);
+      // INCREASED: Scan more blocks to find all items
+      const SCAN_DEPTH = BigInt(100000);
+      const CHUNK_SIZE = BigInt(5000);
       let fromBlock = currentBlock - SCAN_DEPTH > BigInt(0) ? currentBlock - SCAN_DEPTH : BigInt(0);
 
       const fetchLogsInChunks = async (eventName: string) => {
@@ -110,7 +176,9 @@ export default function DashboardPage() {
               toBlock: to
             });
             logs = [...logs, ...chunk];
-          } catch (e) { }
+          } catch (e) {
+            console.warn(`Failed to fetch logs chunk ${i}-${to}:`, e);
+          }
         }
         return logs;
       };
@@ -122,21 +190,30 @@ export default function DashboardPage() {
         fetchLogsInChunks('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)')
       ]);
 
-      const allBlockNumbers = new Set([
+      const allBlockNumbers = Array.from(new Set([
         ...pLogs.map(l => l.blockNumber),
         ...dLogs.map(l => l.blockNumber),
         ...cLogs.map(l => l.blockNumber),
         ...lLogs.map(l => l.blockNumber)
-      ]);
+      ])) as bigint[];
 
       const timestampMap: Record<string, number> = {};
-      const recentBlocks = Array.from(allBlockNumbers).sort().slice(-50);
-      await Promise.all(recentBlocks.map(async (bn) => {
-        try {
-          const block = await publicClient.getBlock({ blockNumber: bn });
-          timestampMap[bn.toString()] = Number(block.timestamp);
-        } catch { }
-      }));
+
+      // Fetch ALL block timestamps in batches
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < allBlockNumbers.length; i += BATCH_SIZE) {
+        const batch = allBlockNumbers.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(async (bn) => {
+          try {
+            const block = await publicClient.getBlock({ blockNumber: bn });
+            if (block && block.timestamp) {
+              timestampMap[bn.toString()] = Number(block.timestamp);
+            }
+          } catch (e) {
+            console.warn(`Failed to fetch block ${bn}:`, e);
+          }
+        }));
+      }
 
       setBlockTimestamps(timestampMap);
       setSalesEvents(pLogs.map(l => ({ id: l.args.id?.toString(), buyer: l.args.buyer, block: l.blockNumber })));

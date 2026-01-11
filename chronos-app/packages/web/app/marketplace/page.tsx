@@ -657,18 +657,18 @@ export default function MarketplacePage() {
 
           // 2. Fetch Listing Events (Chunked to prevent RPC 413 Errors)
           const currentBlock = await client.getBlockNumber();
-          const SCAN_DEPTH = BigInt(50000);
-          const CHUNK_SIZE = BigInt(3000);
+          const SCAN_DEPTH = BigInt(100000); // Increased scan depth
+          const CHUNK_SIZE = BigInt(5000);
           let fromBlock = currentBlock - SCAN_DEPTH > BigInt(0) ? currentBlock - SCAN_DEPTH : BigInt(0);
 
-          const itemBlockMap = new Map();
+          const itemBlockMap = new Map<string, bigint>();
 
+          // Scan for listing events in chunks
           for (let i = fromBlock; i < currentBlock; i += CHUNK_SIZE) {
             const to = (i + CHUNK_SIZE) > currentBlock ? currentBlock : (i + CHUNK_SIZE);
             try {
               const logs = await client.getLogs({
                 address: contractAddr,
-                // Cast to avoid TypeScript/Vercel build errors with AbiEvent
                 event: parseAbiItem('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)') as any,
                 fromBlock: i,
                 toBlock: to
@@ -680,31 +680,56 @@ export default function MarketplacePage() {
                   itemBlockMap.set(args.id.toString(), log.blockNumber);
                 }
               });
-            } catch (e) { /* skip failed chunk */ }
+            } catch (e) {
+              console.warn(`Failed to fetch logs chunk ${i}-${to}:`, e);
+            }
           }
 
-          // Fetch Timestamps
+          // Fetch Timestamps for all unique blocks
           const uniqueBlocks = Array.from(new Set(itemBlockMap.values())) as bigint[];
           const blockTimestamps: Record<string, number> = {};
-          const recentBlocks = uniqueBlocks.sort().slice(-50);
 
-          await Promise.all(recentBlocks.map(async (bn) => {
-            try {
-              const block = await client.getBlock({ blockNumber: bn });
-              blockTimestamps[bn.toString()] = Number(block.timestamp);
-            } catch { }
-          }));
+          // Fetch timestamps in batches to avoid rate limiting
+          const BATCH_SIZE = 10;
+          for (let i = 0; i < uniqueBlocks.length; i += BATCH_SIZE) {
+            const batch = uniqueBlocks.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(async (bn) => {
+              try {
+                const block = await client.getBlock({ blockNumber: bn });
+                if (block && block.timestamp) {
+                  blockTimestamps[bn.toString()] = Number(block.timestamp);
+                }
+              } catch (e) {
+                console.warn(`Failed to fetch block ${bn}:`, e);
+              }
+            }));
+          }
 
-          const taggedItems = items.map(item => {
+          // Tag items with timestamps
+          const now = Math.floor(Date.now() / 1000);
+          const taggedItems = items.map((item, index) => {
             const blockNum = itemBlockMap.get(item.id.toString());
-            const timestamp = blockNum ? blockTimestamps[blockNum.toString()] : (Date.now() / 1000);
+            let timestamp: number;
+
+            if (blockNum && blockTimestamps[blockNum.toString()]) {
+              // Use blockchain timestamp
+              timestamp = blockTimestamps[blockNum.toString()];
+            } else {
+              // Fallback: Calculate approximate time based on item ID
+              // Newer items (higher IDs) get timestamps closer to now
+              const maxId = items.length > 0 ? Math.max(...items.map((i: any) => Number(i.id))) : 1;
+              const itemId = Number(item.id);
+              // Spread items over the last 30 days based on their ID ratio
+              const daysAgo = Math.floor((1 - (itemId / maxId)) * 30);
+              timestamp = now - (daysAgo * 24 * 60 * 60);
+            }
 
             return {
               ...item,
               chainId: chain.id,
               chainName: chain.name,
               currency: chain.nativeCurrency.symbol,
-              timestamp: timestamp || 0
+              timestamp
             };
           });
 

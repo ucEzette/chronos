@@ -9,6 +9,7 @@ import { Footer } from "../../components/Footer";
 import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts";
 import { uploadFileViaApi } from "../../lib/storage";
 import { signatureToKey, encryptFile } from "../../lib/crypto";
+import { saveSellerSettings } from "../../lib/supabase";
 import { cn } from "@/lib/utils";
 import { CATEGORIES, getSubcategories, type Category } from "@/lib/categories";
 import {
@@ -348,7 +349,8 @@ export default function CreateListingPage() {
       maxSupply: "1",
       fileType: ".DATA",
       category: "",
-      tags: [] as string[]
+      tags: [] as string[],
+      autoDeliver: true // Auto-deliver key when purchased
    });
    const [encryptedFile, setEncryptedFile] = useState<File | null>(null);
    const [previewFile, setPreviewFile] = useState<File | null>(null);
@@ -397,7 +399,7 @@ export default function CreateListingPage() {
       }
    }, [previewUrl]);
 
-   const handleInputChange = useCallback((field: string, value: string | string[]) => {
+   const handleInputChange = useCallback((field: string, value: string | string[] | boolean) => {
       setFormData(prev => ({ ...prev, [field]: value }));
    }, []);
 
@@ -419,10 +421,14 @@ export default function CreateListingPage() {
          const signature = await signMessageAsync({ message: `ONEROAD_ACCESS:${formData.name.trim()}` });
          const secureKey = signatureToKey(signature);
 
-         // Store key locally for the seller to re-download their own item later
-         const localKeys = JSON.parse(localStorage.getItem('chronos_seller_keys') || '{}');
-         localKeys[formData.name.trim()] = secureKey;
-         localStorage.setItem('chronos_seller_keys', JSON.stringify(localKeys));
+         // Store key and settings in Supabase (with localStorage fallback)
+         await saveSellerSettings(
+            address,
+            formData.name.trim(),
+            secureKey,
+            formData.autoDeliver,
+            chain?.id || 0
+         );
 
          setStatus('UPLOADING');
 
@@ -721,6 +727,31 @@ export default function CreateListingPage() {
                                  </div>
                               </div>
                            )}
+
+                           {/* Auto-Deliver Toggle */}
+                           <div className="space-y-2 pt-2">
+                              <label className="flex items-center justify-between p-4 bg-black/40 border border-white/10 rounded-xl cursor-pointer hover:border-primary/30 transition-all group">
+                                 <div className="flex items-center gap-3">
+                                    <div className="p-2 rounded-lg bg-green-500/10 text-green-400 group-hover:bg-green-500/20 transition-colors">
+                                       <Zap size={16} />
+                                    </div>
+                                    <div>
+                                       <p className="text-sm font-bold text-white">Auto-Deliver Keys</p>
+                                       <p className="text-xs text-white/40">Automatically deliver decryption key when purchase is made</p>
+                                    </div>
+                                 </div>
+                                 <div className="relative">
+                                    <input
+                                       type="checkbox"
+                                       checked={formData.autoDeliver}
+                                       onChange={e => handleInputChange('autoDeliver', e.target.checked)}
+                                       className="sr-only peer"
+                                    />
+                                    <div className="w-11 h-6 bg-white/10 rounded-full peer peer-checked:bg-green-500 transition-colors"></div>
+                                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                                 </div>
+                              </label>
+                           </div>
                         </div>
                      </div>
                   </div>
