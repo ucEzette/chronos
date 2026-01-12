@@ -38,12 +38,13 @@ export default function DeckPage() {
 
                     <div className="flex items-center gap-2">
                         <a
-                            href="/Data Marketplaces.pdf"
-                            download
+                            href="https://www.canva.com/design/DAG-KaEUwKg/1ePQdUr9ZbR45ewsvQ4yUg/view"
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-all text-sm font-medium"
                         >
                             <Download size={16} />
-                            <span className="hidden sm:inline">Download</span>
+                            <span className="hidden sm:inline">Open in Canva</span>
                         </a>
                         <button
                             onClick={toggleFullscreen}
@@ -56,14 +57,16 @@ export default function DeckPage() {
                 </div>
             </header>
 
-            {/* PDF Viewer */}
+            {/* Canva Presentation Viewer */}
             <main className="flex-1 flex flex-col">
                 <div className="flex-1 w-full max-w-6xl mx-auto p-4">
-                    <div className="relative w-full h-[calc(100vh-120px)] rounded-xl overflow-hidden border border-white/10 bg-white">
+                    <div className="relative w-full h-[calc(100vh-120px)] rounded-xl overflow-hidden border border-white/10 bg-black">
                         <iframe
-                            src="/Data Marketplaces.pdf"
+                            src="https://www.canva.com/design/DAG-KaEUwKg/1ePQdUr9ZbR45ewsvQ4yUg/view?embed"
                             className="w-full h-full"
                             title="ONEROAD Pitch Deck"
+                            allowFullScreen
+                            allow="fullscreen"
                         />
                     </div>
                 </div>
@@ -72,15 +75,16 @@ export default function DeckPage() {
                 <div className="sm:hidden px-4 pb-4">
                     <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 text-center">
                         <p className="text-sm text-white/70 mb-3">
-                            Having trouble viewing? Download the PDF directly:
+                            Having trouble viewing? Open in Canva directly:
                         </p>
                         <a
-                            href="/Data Marketplaces.pdf"
-                            download
+                            href="https://www.canva.com/design/DAG-KaEUwKg/1ePQdUr9ZbR45ewsvQ4yUg/view"
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-black font-bold text-sm"
                         >
-                            <Download size={16} />
-                            Download PDF
+                            <Maximize2 size={16} />
+                            Open Presentation
                         </a>
                     </div>
                 </div>

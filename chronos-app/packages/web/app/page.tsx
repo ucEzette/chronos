@@ -227,18 +227,24 @@ export default function LandingPage() {
                     <p className="text-center text-slate-500 text-xs font-bold tracking-widest uppercase mb-10">
                         Built on Leading Blockchain Infrastructure
                     </p>
-                    <div className="flex flex-wrap justify-center items-center gap-8 sm:gap-12 md:gap-24 opacity-40 grayscale hover:grayscale-0 transition-all duration-500">
+                    <div className="flex flex-wrap justify-center items-center gap-6 sm:gap-10 md:gap-16 opacity-40 grayscale hover:grayscale-0 transition-all duration-500">
+                        <div className="flex items-center gap-2 font-black text-lg sm:text-2xl">
+                            <Shield size={20} /> ARBITRUM
+                        </div>
+                        <div className="flex items-center gap-2 font-black text-lg sm:text-2xl">
+                            <Globe size={20} /> ETHEREUM
+                        </div>
+                        <div className="flex items-center gap-2 font-black text-lg sm:text-2xl">
+                            <Database size={20} /> IPFS
+                        </div>
+                        <div className="flex items-center gap-2 font-black text-lg sm:text-2xl">
+                            <Lock size={20} /> AES-256
+                        </div>
                         <div className="flex items-center gap-2 font-black text-lg sm:text-2xl">
                             <Globe size={20} /> LISK
                         </div>
                         <div className="flex items-center gap-2 font-black text-lg sm:text-2xl">
                             <Shield size={20} /> BASE
-                        </div>
-                        <div className="flex items-center gap-2 font-black text-lg sm:text-2xl">
-                            <Database size={20} /> ARC
-                        </div>
-                        <div className="flex items-center gap-2 font-black text-lg sm:text-2xl">
-                            <Lock size={20} /> DATAHAVEN
                         </div>
                     </div>
                 </div>
@@ -349,8 +355,8 @@ export default function LandingPage() {
                                 </div>
                                 {"// Supported Networks"}<br />
                                 {"chains: ["}<br />
-                                {"  { id: 55931, name: 'DataHaven' },"}<br />
-                                {"  { id: 5042002, name: 'Arc Testnet' }"}<br />
+                                {"  { id: 42161, name: 'Arbitrum One' },"}<br />
+                                {"  { id: 1, name: 'Ethereum Mainnet' }"}<br />
                                 {"]"}
                             </div>
                         </div>
