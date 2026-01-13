@@ -20,7 +20,7 @@ import {
   Settings, Power, Copy, Wallet, Activity, Search,
   CheckCircle2, RefreshCw, Download, Music, Video, FileText, User,
   Clock, ArrowUpRight, ArrowDownLeft, Code, Twitter, Upload, Edit3,
-  Link as LinkIcon, X, Camera, Shield, Ban, Globe, ExternalLink, Tag, Menu, MessageCircle
+  Link as LinkIcon, X, Camera, Shield, Ban, Globe, ExternalLink, Tag, Menu, MessageCircle, KeyRound
 } from "lucide-react";
 
 // --- HELPERS ---
@@ -155,6 +155,12 @@ export default function ProfilePage() {
             // 3. Cancelled Events
             const cancels = await fetchLogsInChunks('event ItemCanceled(uint256 indexed id, address indexed seller)', { seller: profileAddress });
 
+            // 4. Key Delivered Events (Where I am buyer)
+            const deliveries = await fetchLogsInChunks('event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey)', { buyer: profileAddress });
+
+            // 5. Funds Reclaimed Events (Where I am buyer)
+            const reclaims = await fetchLogsInChunks('event FundsReclaimed(uint256 indexed id, address indexed buyer, uint256 amount)', { buyer: profileAddress });
+
             // --- C. PROCESS & FORMAT TRANSACTIONS ---
 
             // Timestamp Cache
@@ -172,7 +178,7 @@ export default function ProfilePage() {
               return Promise.all(logs.map(async (l) => {
                 const ts = await getTimestamp(l.blockNumber);
                 const relatedItem = rawItems.find((i: any) => i.id.toString() === l.args.id?.toString());
-                const txPrice = l.args.price || (relatedItem ? relatedItem.price : BigInt(0));
+                const txPrice = l.args.amount || l.args.price || (relatedItem ? relatedItem.price : BigInt(0));
 
                 return {
                   type,
@@ -190,14 +196,16 @@ export default function ProfilePage() {
               }));
             };
 
-            const [boughtTxs, soldTxs, listedTxs, cancelTxs] = await Promise.all([
+            const [boughtTxs, soldTxs, listedTxs, cancelTxs, deliveredTxs, reclaimedTxs] = await Promise.all([
               formatTx(purchases, 'BOUGHT', false), // Money Out
               formatTx(mySales, 'SOLD', true),      // Money In
               formatTx(myListings, 'LISTED', false), // Neutral
-              formatTx(cancels, 'CANCELED', false)   // Neutral
+              formatTx(cancels, 'CANCELED', false),   // Neutral
+              formatTx(deliveries, 'DELIVERED', false), // Neutral (received key)
+              formatTx(reclaims, 'RECLAIMED', true)   // Money In (Refund)
             ]);
 
-            allTxs.push(...boughtTxs, ...soldTxs, ...listedTxs, ...cancelTxs);
+            allTxs.push(...boughtTxs, ...soldTxs, ...listedTxs, ...cancelTxs, ...deliveredTxs, ...reclaimedTxs);
 
             // Reputation Calc
             totalSales += mySales.length;
@@ -584,12 +592,16 @@ export default function ProfilePage() {
                       <div className={cn("p-3 rounded-lg border",
                         tx.type === 'BOUGHT' ? "bg-blue-500/10 border-blue-500/20 text-blue-500" :
                           tx.type === 'SOLD' ? "bg-green-500/10 border-green-500/20 text-green-500" :
-                            tx.type === 'LISTED' ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500" :
-                              "bg-red-500/10 border-red-500/20 text-red-500"
+                            tx.type === 'RECLAIMED' ? "bg-purple-500/10 border-purple-500/20 text-purple-500" :
+                              tx.type === 'DELIVERED' ? "bg-primary/10 border-primary/20 text-primary" :
+                                tx.type === 'LISTED' ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500" :
+                                  "bg-red-500/10 border-red-500/20 text-red-500"
                       )}>
                         {tx.type === 'BOUGHT' ? <ArrowDownLeft size={20} /> :
                           tx.type === 'SOLD' ? <ArrowUpRight size={20} /> :
-                            tx.type === 'LISTED' ? <Tag size={20} /> : <Ban size={20} />}
+                            tx.type === 'RECLAIMED' ? <RefreshCw size={20} /> :
+                              tx.type === 'DELIVERED' ? <KeyRound size={20} /> :
+                                tx.type === 'LISTED' ? <Tag size={20} /> : <Ban size={20} />}
                       </div>
 
                       {/* Details */}
@@ -598,11 +610,15 @@ export default function ProfilePage() {
                           <span className={cn(
                             tx.type === 'BOUGHT' ? "text-blue-400" :
                               tx.type === 'SOLD' ? "text-green-400" :
-                                tx.type === 'LISTED' ? "text-yellow-400" : "text-red-400"
+                                tx.type === 'RECLAIMED' ? "text-purple-400" :
+                                  tx.type === 'DELIVERED' ? "text-primary" :
+                                    tx.type === 'LISTED' ? "text-yellow-400" : "text-red-400"
                           )}>
                             {tx.type === 'BOUGHT' ? 'Purchased Asset' :
                               tx.type === 'SOLD' ? 'Item Sold' :
-                                tx.type === 'LISTED' ? 'Created Listing' : 'Canceled Item'}
+                                tx.type === 'RECLAIMED' ? 'Funds Refunded' :
+                                  tx.type === 'DELIVERED' ? 'Key Received' :
+                                    tx.type === 'LISTED' ? 'Created Listing' : 'Canceled Item'}
                           </span>
 
                           {/* Chain Badge */}
