@@ -68,6 +68,7 @@ export declare namespace PayLock {
 export interface PayLockInterface extends Interface {
   getFunction(
     nameOrSignature:
+      | "DELIVERY_TIMEOUT"
       | "accumulatedFees"
       | "buyItem"
       | "cancelListing"
@@ -78,7 +79,9 @@ export interface PayLockInterface extends Interface {
       | "items"
       | "listItem"
       | "owner"
+      | "purchaseTime"
       | "purchases"
+      | "reclaimFunds"
       | "renounceOwnership"
       | "serviceFeePercentage"
       | "setFee"
@@ -90,6 +93,7 @@ export interface PayLockInterface extends Interface {
     nameOrSignatureOrTopic:
       | "FeeUpdated"
       | "FeesWithdrawn"
+      | "FundsReclaimed"
       | "ItemCanceled"
       | "ItemListed"
       | "ItemPurchased"
@@ -97,6 +101,10 @@ export interface PayLockInterface extends Interface {
       | "OwnershipTransferred"
   ): EventFragment;
 
+  encodeFunctionData(
+    functionFragment: "DELIVERY_TIMEOUT",
+    values?: undefined
+  ): string;
   encodeFunctionData(
     functionFragment: "accumulatedFees",
     values?: undefined
@@ -129,8 +137,16 @@ export interface PayLockInterface extends Interface {
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
+    functionFragment: "purchaseTime",
+    values: [BigNumberish, AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "purchases",
     values: [BigNumberish, AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "reclaimFunds",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "renounceOwnership",
@@ -154,6 +170,10 @@ export interface PayLockInterface extends Interface {
   ): string;
 
   decodeFunctionResult(
+    functionFragment: "DELIVERY_TIMEOUT",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "accumulatedFees",
     data: BytesLike
   ): Result;
@@ -175,7 +195,15 @@ export interface PayLockInterface extends Interface {
   decodeFunctionResult(functionFragment: "items", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "listItem", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "purchaseTime",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "purchases", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "reclaimFunds",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "renounceOwnership",
     data: BytesLike
@@ -212,6 +240,24 @@ export namespace FeesWithdrawnEvent {
   export type OutputTuple = [owner: string, amount: bigint];
   export interface OutputObject {
     owner: string;
+    amount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace FundsReclaimedEvent {
+  export type InputTuple = [
+    id: BigNumberish,
+    buyer: AddressLike,
+    amount: BigNumberish
+  ];
+  export type OutputTuple = [id: bigint, buyer: string, amount: bigint];
+  export interface OutputObject {
+    id: bigint;
+    buyer: string;
     amount: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -348,6 +394,8 @@ export interface PayLock extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
+  DELIVERY_TIMEOUT: TypedContractMethod<[], [bigint], "view">;
+
   accumulatedFees: TypedContractMethod<[], [bigint], "view">;
 
   buyItem: TypedContractMethod<[_id: BigNumberish], [void], "payable">;
@@ -421,6 +469,12 @@ export interface PayLock extends BaseContract {
 
   owner: TypedContractMethod<[], [string], "view">;
 
+  purchaseTime: TypedContractMethod<
+    [arg0: BigNumberish, arg1: AddressLike],
+    [bigint],
+    "view"
+  >;
+
   purchases: TypedContractMethod<
     [arg0: BigNumberish, arg1: AddressLike],
     [
@@ -432,6 +486,8 @@ export interface PayLock extends BaseContract {
     ],
     "view"
   >;
+
+  reclaimFunds: TypedContractMethod<[_id: BigNumberish], [void], "nonpayable">;
 
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
 
@@ -451,6 +507,9 @@ export interface PayLock extends BaseContract {
     key: string | FunctionFragment
   ): T;
 
+  getFunction(
+    nameOrSignature: "DELIVERY_TIMEOUT"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "accumulatedFees"
   ): TypedContractMethod<[], [bigint], "view">;
@@ -531,6 +590,13 @@ export interface PayLock extends BaseContract {
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "purchaseTime"
+  ): TypedContractMethod<
+    [arg0: BigNumberish, arg1: AddressLike],
+    [bigint],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "purchases"
   ): TypedContractMethod<
     [arg0: BigNumberish, arg1: AddressLike],
@@ -543,6 +609,9 @@ export interface PayLock extends BaseContract {
     ],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "reclaimFunds"
+  ): TypedContractMethod<[_id: BigNumberish], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "renounceOwnership"
   ): TypedContractMethod<[], [void], "nonpayable">;
@@ -572,6 +641,13 @@ export interface PayLock extends BaseContract {
     FeesWithdrawnEvent.InputTuple,
     FeesWithdrawnEvent.OutputTuple,
     FeesWithdrawnEvent.OutputObject
+  >;
+  getEvent(
+    key: "FundsReclaimed"
+  ): TypedContractEvent<
+    FundsReclaimedEvent.InputTuple,
+    FundsReclaimedEvent.OutputTuple,
+    FundsReclaimedEvent.OutputObject
   >;
   getEvent(
     key: "ItemCanceled"
@@ -630,6 +706,17 @@ export interface PayLock extends BaseContract {
       FeesWithdrawnEvent.InputTuple,
       FeesWithdrawnEvent.OutputTuple,
       FeesWithdrawnEvent.OutputObject
+    >;
+
+    "FundsReclaimed(uint256,address,uint256)": TypedContractEvent<
+      FundsReclaimedEvent.InputTuple,
+      FundsReclaimedEvent.OutputTuple,
+      FundsReclaimedEvent.OutputObject
+    >;
+    FundsReclaimed: TypedContractEvent<
+      FundsReclaimedEvent.InputTuple,
+      FundsReclaimedEvent.OutputTuple,
+      FundsReclaimedEvent.OutputObject
     >;
 
     "ItemCanceled(uint256,address)": TypedContractEvent<

@@ -31,9 +31,15 @@ contract PayLock is Ownable, ReentrancyGuard {
     uint256 public serviceFeePercentage = 5; // Default 5%
     uint256 public accumulatedFees; // Track fees available for withdrawal
 
+    // Refund Logic Constants
+    uint256 public constant DELIVERY_TIMEOUT = 24 hours;
+
     mapping(uint256 => Item) public items;
     // Mapping: ItemID => BuyerAddress => PurchaseDetails
     mapping(uint256 => mapping(address => Purchase)) public purchases;
+    
+    // Mapping: ItemID => BuyerAddress => PurchaseTimestamp (for refunds)
+    mapping(uint256 => mapping(address => uint256)) public purchaseTime;
 
     // Events
     event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply);
@@ -42,6 +48,7 @@ contract PayLock is Ownable, ReentrancyGuard {
     event ItemCanceled(uint256 indexed id, address indexed seller);
     event FeeUpdated(uint256 newFee);
     event FeesWithdrawn(address indexed owner, uint256 amount);
+    event FundsReclaimed(uint256 indexed id, address indexed buyer, uint256 amount);
 
     constructor() Ownable(msg.sender) {}
 
@@ -98,6 +105,9 @@ contract PayLock is Ownable, ReentrancyGuard {
             isDelivered: false
         });
 
+        // Set purchase timestamp for refund timeout
+        purchaseTime[_id][msg.sender] = block.timestamp;
+
         emit ItemPurchased(_id, msg.sender);
     }
 
@@ -115,6 +125,9 @@ contract PayLock is Ownable, ReentrancyGuard {
         // 1. Update State
         purchase.encryptedKey = _keyForBuyer;
         purchase.isDelivered = true;
+        
+        // Remove purchase time so they cant refund anymore
+        delete purchaseTime[_id][_buyer];
 
         // 2. Calculate Fee & Payout
         uint256 feeAmount = (item.price * serviceFeePercentage) / 100;
@@ -128,6 +141,36 @@ contract PayLock is Ownable, ReentrancyGuard {
         require(success, "Transfer to seller failed");
 
         emit KeyDelivered(_id, _buyer, _keyForBuyer);
+    }
+
+    /**
+     * @dev Allows buyer to reclaim funds if seller hasn't delivered key within timeout window.
+     */
+    function reclaimFunds(uint256 _id) external nonReentrant {
+        uint256 boughtAt = purchaseTime[_id][msg.sender];
+        require(boughtAt > 0, "No active purchase found"); // Checks if bought AND not delivered (since delivery deletes time)
+        require(block.timestamp > boughtAt + DELIVERY_TIMEOUT, "Wait for timeout before reclaiming");
+        
+        Item storage item = items[_id];
+        
+        // Effects
+        delete purchaseTime[_id][msg.sender];
+        delete purchases[_id][msg.sender]; // Reset purchase state completely
+        
+        // Reduce sold count to allow others to buy
+        if (item.soldCount > 0) {
+            item.soldCount--;
+            // If it was sold out, it's not anymore
+            if (item.isSoldOut && item.isActive) {
+                item.isSoldOut = false;
+            }
+        }
+
+        // Interaction
+        (bool success, ) = payable(msg.sender).call{value: item.price}("");
+        require(success, "Refund failed");
+
+        emit FundsReclaimed(_id, msg.sender, item.price);
     }
 
     function cancelListing(uint256 _id) external {

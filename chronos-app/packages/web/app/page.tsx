@@ -204,7 +204,7 @@ export default function LandingPage() {
                                 ))}
                             </div>
                             <p className="text-sm text-slate-500 font-medium">
-                                <span className="text-white font-bold">12.4k+</span> active sellers
+                                <span className="text-white font-bold">12.4k+</span> active sellers <span className="text-slate-600">(static)</span>
                             </p>
                         </div>
                     </div>

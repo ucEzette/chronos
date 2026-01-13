@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, createConfig, http, createStorage, useReconnect } from "wagmi";
+import { arbitrumSepolia } from "wagmi/chains";
 import { metaMask, injected, walletConnect } from "wagmi/connectors";
 import { ReactNode, useEffect } from "react";
 import { type Chain } from "viem";
@@ -50,7 +51,7 @@ const storage = createStorage({
 
 // 3. Configure Wagmi with BOTH Chains and Multiple Connectors
 export const config = createConfig({
-  chains: [datahaven, arcTestnet],
+  chains: [datahaven, arcTestnet, arbitrumSepolia],
   connectors: [
     // Injected connector - DO NOT shimDisconnect to prevent unwanted disconnects
     injected({
@@ -84,6 +85,7 @@ export const config = createConfig({
       retryCount: 5,
       retryDelay: 1500,
     }),
+    [arbitrumSepolia.id]: http("https://sepolia-rollup.arbitrum.io/rpc"),
   },
   // Reduce polling frequency to prevent rate limiting
   pollingInterval: 30_000, // 30 seconds

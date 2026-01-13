@@ -21,6 +21,8 @@ import { ReviewForm } from "@/components/ReviewForm";
 import { ReviewList } from "@/components/ReviewList";
 import { StarRating } from "@/components/StarRating";
 import { getItemAverageRating } from "@/lib/reviews";
+import { ReportModal } from "@/components/ReportModal";
+import { Flag } from "lucide-react";
 
 export default function ItemDetailsPage() {
   const params = useParams();
@@ -42,6 +44,8 @@ export default function ItemDetailsPage() {
   const [waitingForKey, setWaitingForKey] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isReclaiming, setIsReclaiming] = useState(false);
 
   const { addToCart, isInCart } = useCart();
 
@@ -61,6 +65,18 @@ export default function ItemDetailsPage() {
     chainId: targetChainId,
     query: { enabled: !!address }
   });
+
+  const { data: purchaseTimeData, refetch: refetchPurchaseTime } = useReadContract({
+    address: contractAddr,
+    abi: PAYLOCK_ABI,
+    functionName: 'purchaseTime',
+    args: [itemId, address || "0x0000000000000000000000000000000000000000"],
+    chainId: targetChainId,
+    query: { enabled: !!address }
+  });
+
+  const purchaseTimestamp = Number(purchaseTimeData || 0);
+  const canReclaim = purchaseTimestamp > 0 && (Date.now() / 1000) > (purchaseTimestamp + 24 * 3600);
 
   const item = (rawItems as any[])?.find(i => i.id === itemId);
   const isOwner = ownershipData?.[0] === true;
@@ -212,6 +228,33 @@ export default function ItemDetailsPage() {
     }
   };
 
+  const handleReclaim = async () => {
+    if (currentChain?.id !== targetChainId) {
+      try { await switchChainAsync({ chainId: targetChainId }); }
+      catch { alert("Please switch network manually."); return; }
+    }
+
+    setIsReclaiming(true);
+    try {
+      await writeContractAsync({
+        address: contractAddr,
+        abi: PAYLOCK_ABI,
+        functionName: 'reclaimFunds',
+        args: [itemId],
+      });
+
+      alert("Funds reclaimed successfully!");
+      router.refresh();
+      await refetchItems();
+      await refetchOwnership();
+      await refetchPurchaseTime();
+    } catch (e: any) {
+      alert("Reclaim failed: " + (e.reason || e.message));
+    } finally {
+      setIsReclaiming(false);
+    }
+  };
+
   if (isItemLoading || !item) return <div className="min-h-screen bg-[#020e14] flex items-center justify-center"><Loader2 className="animate-spin text-primary" size={40} /></div>;
 
   const type = item.fileType.toUpperCase();
@@ -284,6 +327,13 @@ export default function ItemDetailsPage() {
                 <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight leading-none mb-2">{item.name}</h1>
                 <button onClick={() => { navigator.clipboard.writeText(window.location.href); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
                   {copied ? <Check size={18} className="text-green-500" /> : <Share2 size={18} />}
+                </button>
+                <button
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="p-2 rounded-full bg-white/5 hover:bg-red-500/10 text-gray-400 hover:text-red-500 transition-colors ml-2"
+                  title="Report Content"
+                >
+                  <Flag size={18} />
                 </button>
               </div>
               <p className="text-primary font-mono text-sm mb-4">ID: #{item.id.toString()} • {type}</p>
@@ -418,7 +468,33 @@ export default function ItemDetailsPage() {
                     {isDownloading ? <Loader2 className="animate-spin" /> : <Download size={20} />}
                     {isDownloading ? downloadMsg : accessKey ? "Decrypt & Download" : "Waiting for Key..."}
                   </button>
-                  {!accessKey && <p className="text-xs text-center mt-2 text-yellow-500 font-mono">* Payment sent. Waiting for seller to release encryption key.</p>}
+                  {!accessKey && (
+                    <div className="space-y-3 mt-4">
+                      <p className="text-xs text-center text-yellow-500 font-mono">* Payment sent. Waiting for seller to release encryption key.</p>
+
+                      {purchaseTimestamp > 0 && (
+                        <div className="p-3 bg-white/5 rounded-xl border border-white/10 text-center">
+                          <p className="text-xs text-gray-400 mb-2">
+                            Seller has 24 hours to deliver.
+                          </p>
+                          {canReclaim ? (
+                            <button
+                              onClick={handleReclaim}
+                              disabled={isReclaiming}
+                              className="w-full py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-500 font-bold uppercase text-xs transition-colors flex items-center justify-center gap-2"
+                            >
+                              {isReclaiming ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />}
+                              Reclaim Funds
+                            </button>
+                          ) : (
+                            <p className="text-xs font-mono text-gray-500">
+                              Reclaim available in: {Math.max(0, Math.ceil((24 * 3600 - (Date.now() / 1000 - purchaseTimestamp)) / 3600))}h
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="space-y-3">
@@ -493,6 +569,18 @@ export default function ItemDetailsPage() {
         </div>
       </main>
       <Footer />
+
+      {item && (
+        <ReportModal
+          isOpen={isReportModalOpen}
+          onClose={() => setIsReportModalOpen(false)}
+          itemId={itemId.toString()}
+          chainId={targetChainId}
+          itemName={meta?.name || item.name}
+          sellerAddress={item.seller}
+          reporterAddress={address || ""}
+        />
+      )}
     </div>
   );
 }

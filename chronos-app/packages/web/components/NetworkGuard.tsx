@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils';
 // Supported chain IDs
 const DATAHAVEN_ID = 55931;
 const ARC_ID = 5042002;
-const SUPPORTED_CHAIN_IDS = [DATAHAVEN_ID, ARC_ID];
+const ARB_SEPOLIA_ID = 421614;
+const SUPPORTED_CHAIN_IDS = [DATAHAVEN_ID, ARC_ID, ARB_SEPOLIA_ID];
 
 interface NetworkGuardProps {
     children: React.ReactNode;
@@ -50,9 +51,18 @@ export function NetworkGuard({ children, requiredChainId }: NetworkGuardProps) {
         }
     };
 
+    const handleSwitchToArb = () => {
+        try {
+            switchChain?.({ chainId: ARB_SEPOLIA_ID });
+        } catch (e) {
+            console.error('Failed to switch network:', e);
+        }
+    };
+
     const getChainName = (id: number) => {
         if (id === DATAHAVEN_ID) return 'DataHaven Testnet';
         if (id === ARC_ID) return 'Arc Testnet';
+        if (id === ARB_SEPOLIA_ID) return 'Arbitrum Sepolia';
         return 'Unknown Network';
     };
 
@@ -116,6 +126,18 @@ export function NetworkGuard({ children, requiredChainId }: NetworkGuardProps) {
                             </button>
 
                             <button
+                                onClick={handleSwitchToArb}
+                                disabled={isPending}
+                                className={cn(
+                                    "px-4 py-2 rounded-lg text-xs font-bold transition-all",
+                                    "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30",
+                                    isPending && "opacity-50 cursor-not-allowed"
+                                )}
+                            >
+                                Arbitrum Sepolia
+                            </button>
+
+                            <button
                                 onClick={() => setDismissed(true)}
                                 className="p-2 hover:bg-white/20 rounded-lg transition-all"
                             >
@@ -173,7 +195,8 @@ export function useNetworkSwitch() {
         switchToArc,
         supportedChains: [datahaven, arcTestnet],
         DATAHAVEN_ID,
-        ARC_ID
+        ARC_ID,
+        ARB_SEPOLIA_ID
     };
 }
 

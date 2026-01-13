@@ -129,21 +129,42 @@ export function Navigation() {
       await switchChainAsync({ chainId: targetChainId });
       setIsNetworkMenuOpen(false);
     } catch (error: any) {
-      // --- FIX: Vercel Build Error (window.ethereum typing) ---
       if (typeof window !== "undefined" && (window as any).ethereum) {
         try {
-          const targetChain = targetChainId === 5042002 ? arcTestnet : datahaven;
-          await (window as any).ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: `0x${targetChain.id.toString(16)}`,
-              chainName: targetChain.name,
-              nativeCurrency: targetChain.nativeCurrency,
-              rpcUrls: [targetChain.rpcUrls.default.http[0]],
-              blockExplorerUrls: [targetChain.blockExplorers?.default.url],
-            }],
-          });
-          await switchChainAsync({ chainId: targetChainId });
+          let params;
+          if (targetChainId === 5042002) {
+            params = {
+              chainId: `0x${arcTestnet.id.toString(16)}`,
+              chainName: arcTestnet.name,
+              nativeCurrency: arcTestnet.nativeCurrency,
+              rpcUrls: [arcTestnet.rpcUrls.default.http[0]],
+              blockExplorerUrls: [arcTestnet.blockExplorers?.default.url],
+            };
+          } else if (targetChainId === 55931) {
+            params = {
+              chainId: `0x${datahaven.id.toString(16)}`,
+              chainName: datahaven.name,
+              nativeCurrency: datahaven.nativeCurrency,
+              rpcUrls: [datahaven.rpcUrls.default.http[0]],
+              blockExplorerUrls: [datahaven.blockExplorers?.default.url],
+            };
+          } else if (targetChainId === 421614) {
+            params = {
+              chainId: `0x${(421614).toString(16)}`,
+              chainName: "Arbitrum Sepolia",
+              nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+              rpcUrls: ["https://sepolia-rollup.arbitrum.io/rpc"],
+              blockExplorerUrls: ["https://sepolia.arbiscan.io"],
+            };
+          }
+
+          if (params) {
+            await (window as any).ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [params],
+            });
+            await switchChainAsync({ chainId: targetChainId });
+          }
           setIsNetworkMenuOpen(false);
         } catch (addError) {
           alert("Could not switch network. Please add it manually.");
@@ -152,9 +173,9 @@ export function Navigation() {
     }
   };
 
-  const SUPPORTED_CHAINS = [55931, 5042002];
+  const SUPPORTED_CHAINS = [55931, 5042002, 421614];
   const isWrongNetwork = isConnected && chain && !SUPPORTED_CHAINS.includes(chain.id);
-  const currencySymbol = chain?.id === 5042002 ? "USDC" : "MOCK";
+  const currencySymbol = chain?.id === 5042002 ? "USDC" : "MOCK"; // Note: Arb uses ETH/MOCK for now
 
   return (
     <>
@@ -311,6 +332,22 @@ export function Navigation() {
                               Arc Testnet
                             </span>
                             {chain?.id === 5042002 && <Check size={14} className="text-primary" />}
+                          </button>
+
+                          <button
+                            onClick={() => handleSwitchNetwork(421614)}
+                            className={cn(
+                              "w-full px-3 py-3 text-left text-xs font-bold rounded-xl transition-all flex items-center justify-between group",
+                              chain?.id === 421614
+                                ? "bg-primary/20 text-primary border border-primary/30"
+                                : "hover:bg-white/5 text-white/80 hover:text-white"
+                            )}
+                          >
+                            <span className="flex items-center gap-3">
+                              <span className="size-2.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]" />
+                              Arbitrum Sepolia
+                            </span>
+                            {chain?.id === 421614 && <Check size={14} className="text-primary" />}
                           </button>
                         </div>
                       </div>
@@ -469,11 +506,14 @@ export function Navigation() {
                       </span>
                     </div>
                     <button
-                      onClick={() => handleSwitchNetwork(chain?.id === 55931 ? 5042002 : 55931)}
+                      onClick={() => {
+                        const next = chain?.id === 55931 ? 5042002 : chain?.id === 5042002 ? 421614 : 55931;
+                        handleSwitchNetwork(next);
+                      }}
                       className="px-3 py-2 bg-white/5 rounded-lg text-xs font-bold text-white/70 flex items-center gap-2"
                     >
-                      <span className={cn("size-2 rounded-full", chain?.id === 55931 ? "bg-cyan-400" : "bg-blue-500")} />
-                      {chain?.id === 55931 ? "DH" : "Arc"}
+                      <span className={cn("size-2 rounded-full", chain?.id === 55931 ? "bg-cyan-400" : chain?.id === 5042002 ? "bg-blue-500" : "bg-orange-500")} />
+                      {chain?.id === 55931 ? "DH" : chain?.id === 5042002 ? "Arc" : "Arb"}
                     </button>
                     {/* Mobile Cart Button */}
                     <CartButton />

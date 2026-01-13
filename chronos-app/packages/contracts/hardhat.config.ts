@@ -17,18 +17,24 @@ const config: HardhatUserConfig = {
       chainId: 5042002, // Verified Chain ID
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
+    arbitrumSepolia: {
+      url: "https://sepolia-rollup.arbitrum.io/rpc",
+      chainId: 421614,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    },
   },
   etherscan: {
     apiKey: {
-      datahaven: "test", 
-      arc_testnet: "test", 
+      datahaven: "test",
+      arc_testnet: "test",
+      arbitrumSepolia: process.env.ARBISCAN_API_KEY || "",
     },
     customChains: [
       {
         network: "datahaven",
         chainId: 55931,
         urls: {
-          apiURL: "https://testnet.dhscan.io/api", 
+          apiURL: "https://testnet.dhscan.io/api",
           browserURL: "https://testnet.dhscan.io/",
         },
       },
@@ -36,7 +42,7 @@ const config: HardhatUserConfig = {
         network: "arc_testnet",
         chainId: 5042002,
         urls: {
-          apiURL: "https://testnet.arcscan.app/api", 
+          apiURL: "https://testnet.arcscan.app/api",
           browserURL: "https://testnet.arcscan.app/",
         },
       },

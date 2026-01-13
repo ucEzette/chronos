@@ -6,6 +6,7 @@ import { formatEther, createPublicClient, http, parseAbiItem } from "viem";
 import Link from "next/link";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "@/lib/contracts";
 import { datahaven, arcTestnet } from "@/lib/chains";
+import { arbitrumSepolia } from "wagmi/chains";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { getDataHavenUrl } from "@/lib/datahaven";
@@ -19,6 +20,7 @@ import {
   TrendingUp, Clock, DollarSign, Package, Filter, X,
   Grid, List, SlidersHorizontal, ShoppingCart, Heart
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 // --- Skeleton Card Component ---
 const SkeletonCard = memo(function SkeletonCard() {
@@ -335,7 +337,7 @@ const MarketplaceCard = memo(function MarketplaceCard({ item, viewMode = 'grid' 
           </div>
           <p className="text-xs text-white/40 truncate">{meta.description}</p>
           <div className="flex items-center gap-3 mt-1 text-[10px] text-white/40">
-            <span>{item.chainId === 55931 ? "DH" : "ARC"}</span>
+            <span>{item.chainId === 55931 ? "DH" : item.chainId === 5042002 ? "ARC" : "ARB"}</span>
             <span>•</span>
             <span>{sold}/{max} sold</span>
           </div>
@@ -367,9 +369,12 @@ const MarketplaceCard = memo(function MarketplaceCard({ item, viewMode = 'grid' 
           "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold border shadow-sm backdrop-blur-md",
           item.chainId === 55931
             ? "bg-cyan-900/80 text-cyan-400 border-cyan-500/30"
-            : "bg-blue-900/80 text-blue-400 border-blue-500/30"
+            : item.chainId === 5042002
+              ? "bg-blue-900/80 text-blue-400 border-blue-500/30"
+              : "bg-orange-900/80 text-orange-400 border-orange-500/30"
         )}>
-          <Globe size={10} /> {item.chainId === 55931 ? "DH" : "ARC"}
+          <Globe size={10} />
+          {item.chainId === 55931 ? "DH" : item.chainId === 5042002 ? "ARC" : "ARB"}
         </span>
         <span className="inline-flex items-center rounded-full bg-black/80 backdrop-blur-md px-2.5 py-1 text-[10px] font-bold text-primary border border-primary/30 shadow-sm">
           {type.replace('.', '')}
@@ -613,6 +618,24 @@ export default function MarketplacePage() {
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [priceRange, setPriceRange] = useState({ min: '', max: '' });
+  const [moderatedItems, setModeratedItems] = useState<Set<string>>(new Set());
+
+  // Fetch moderated content
+  useEffect(() => {
+    const fetchModerated = async () => {
+      if (!supabase) return;
+      try {
+        const { data } = await supabase.from('moderated_content').select('item_id, chain_id');
+        if (data) {
+          const ids = new Set(data.map(i => `${i.chain_id}-${i.item_id}`));
+          setModeratedItems(ids);
+        }
+      } catch (e) {
+        console.error("Failed to fetch moderated content:", e);
+      }
+    };
+    fetchModerated();
+  }, []);
 
   // Prices Ticker
   useEffect(() => {
@@ -639,7 +662,7 @@ export default function MarketplacePage() {
       if (allItems.length === 0) setIsLoading(true);
       else setIsRefreshing(true);
 
-      const chains = [datahaven, arcTestnet];
+      const chains = [datahaven, arcTestnet, arbitrumSepolia];
       const aggregatedItems: any[] = [];
 
       await Promise.all(chains.map(async (chain) => {
@@ -769,7 +792,10 @@ export default function MarketplacePage() {
       // Fallback for contracts that don't have isActive field
       if (item.isActive === undefined) matchesView = view === 'ACTIVE' ? !item.isSoldOut : item.isSoldOut;
 
-      return matchesSearch && matchesFilter && matchesCategory && matchesView;
+      // Filter out moderated items
+      const isModerated = moderatedItems.has(`${item.chainId}-${item.id}`);
+
+      return matchesSearch && matchesFilter && matchesCategory && matchesView && !isModerated;
     });
 
     const sorted = [...items];
