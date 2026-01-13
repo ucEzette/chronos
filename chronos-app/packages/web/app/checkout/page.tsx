@@ -191,7 +191,7 @@ export default function CheckoutPage() {
                                                 <p className="text-sm font-bold font-mono">
                                                     {formatEther(item.price * BigInt(item.quantity))}
                                                     <span className="text-[10px] text-white/40 ml-1">
-                                                        {ci.chainId === 55931 ? 'MOCK' : 'USDC'}
+                                                        {ci.chainId === 55931 ? 'MOCK' : ci.chainId === 421614 ? 'ETH' : 'USDC'}
                                                     </span>
                                                 </p>
                                             )}

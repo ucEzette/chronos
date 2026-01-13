@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, FormEvent, ChangeEvent } from 'react';
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt, useAccount } from 'wagmi';
 import { parseEther } from 'viem';
 import Cropper from 'react-easy-crop';
 import JSZip from 'jszip';
@@ -10,8 +10,8 @@ import { PAYLOCK_ABI, PAYLOCK_ADDRESS } from '@/lib/contracts';
 import { uploadToIPFS } from '@/lib/ipfs';
 import { scanFile } from '@/lib/security'; // Enterprise Virus Scanner
 import { getCroppedImg, getVideoCover, getAudioSnippet } from '@/lib/media';
-import { 
-  Loader2, DollarSign, UploadCloud, CheckCircle, 
+import {
+  Loader2, DollarSign, UploadCloud, CheckCircle,
   Image as ImageIcon, FileAudio, FileVideo, FileText, X, Eye, Layers, Archive, ShieldCheck, Download
 } from 'lucide-react';
 
@@ -24,13 +24,14 @@ export function SellForm() {
   const [supply, setSupply] = useState("1");
   const [name, setName] = useState("");
   const [status, setStatus] = useState("idle");
+  const { chain } = useAccount();
 
   const [isEditing, setIsEditing] = useState(false);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<CropArea | null>(null);
   const [blurAmount, setBlurAmount] = useState(0);
-  
+
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [generatedInfo, setGeneratedInfo] = useState<string>("");
@@ -43,7 +44,7 @@ export function SellForm() {
       const selectedFiles = Array.from(e.target.files);
       setFiles(selectedFiles);
       const primaryFile = selectedFiles[0];
-      
+
       setPreviewUrl(null);
       setPreviewBlob(null);
       setCustomCover(null);
@@ -59,9 +60,9 @@ export function SellForm() {
       try {
         if (primaryFile.type.startsWith("image/")) {
           setPreviewUrl(URL.createObjectURL(primaryFile));
-          setIsEditing(true); 
+          setIsEditing(true);
           setGeneratedInfo("");
-        } 
+        }
         else if (primaryFile.type.startsWith("video/")) {
           const frame = await getVideoCover(primaryFile);
           if (frame) {
@@ -110,7 +111,7 @@ export function SellForm() {
 
     try {
       let fileToEncrypt = files[0];
-      
+
       // 1. Handling Bundles
       if (files.length > 1) {
         setStatus("zipping");
@@ -131,17 +132,17 @@ export function SellForm() {
       setStatus("previewing");
       let previewCid = "";
       if (customCover) {
-         previewCid = await uploadToIPFS(customCover);
+        previewCid = await uploadToIPFS(customCover);
       } else if (previewBlob) {
-         let type = files[0].type.startsWith("audio/") ? "audio/wav" : "image/jpeg";
-         const previewFile = new File([previewBlob], "preview", { type });
-         previewCid = await uploadToIPFS(previewFile);
+        let type = files[0].type.startsWith("audio/") ? "audio/wav" : "image/jpeg";
+        const previewFile = new File([previewBlob], "preview", { type });
+        previewCid = await uploadToIPFS(previewFile);
       }
 
       // 4. Encryption & Mandatory Key Backup
       setStatus("encrypting");
       const rawKey = generateFileKey();
-      
+
       // FORCE DOWNLOAD of secret key for Seller backup
       const keyBlob = new Blob([`Item: ${name}\nKey: ${rawKey}\n\nKEEP THIS FILE SAFE! You need this key to deliver the item to buyers.`], { type: 'text/plain' });
       const keyUrl = URL.createObjectURL(keyBlob);
@@ -158,7 +159,7 @@ export function SellForm() {
       // 5. IPFS Upload (Encrypted Content)
       setStatus("uploading");
       const ipfsCid = await uploadToIPFS(encryptedFile);
-      
+
       // Fallback local storage
       localStorage.setItem(`paylock_key_${ipfsCid}`, rawKey);
 
@@ -177,7 +178,7 @@ export function SellForm() {
         functionName: 'listItem',
         args: [name, ipfsCid, previewCid, fileType, parseEther(price), BigInt(supply)],
       });
-      
+
       setStatus("mining");
 
     } catch (err: any) {
@@ -205,33 +206,33 @@ export function SellForm() {
         <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-6 animate-in fade-in">
           <div className="w-full max-w-2xl bg-zinc-900 rounded-2xl overflow-hidden shadow-2xl border border-white/10">
             <div className="p-4 border-b border-white/10 flex justify-between items-center">
-               <h3 className="font-bold text-white flex items-center gap-2"><Eye size={18}/> Configure Preview</h3>
-               <button onClick={() => setIsEditing(false)}><X size={20} className="text-muted hover:text-white"/></button>
+              <h3 className="font-bold text-white flex items-center gap-2"><Eye size={18} /> Configure Preview</h3>
+              <button onClick={() => setIsEditing(false)}><X size={20} className="text-muted hover:text-white" /></button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 h-[400px]">
-               <div className="relative bg-black h-full border-r border-white/10">
-                  <Cropper
-                    image={URL.createObjectURL(files[0])}
-                    crop={crop}
-                    zoom={zoom}
-                    aspect={16 / 9}
-                    onCropChange={setCrop}
-                    onCropComplete={onCropComplete}
-                    onZoomChange={setZoom}
-                  />
-               </div>
-               <div className="p-6 flex flex-col justify-between bg-zinc-900">
-                 <div className="space-y-4">
-                   <h4 className="text-xs font-bold text-muted uppercase">Public Blur Level</h4>
-                   <div className="w-full aspect-video bg-black rounded-lg overflow-hidden relative border border-white/10">
-                      <img src={URL.createObjectURL(files[0])} className="w-full h-full object-cover transition-all duration-75" style={{ filter: `blur(${blurAmount}px)`, transform: `scale(${zoom})` }} />
-                   </div>
-                 </div>
-                 <div className="space-y-4">
-                    <input type="range" min="0" max="25" value={blurAmount} onChange={(e) => setBlurAmount(Number(e.target.value))} className="w-full h-2 bg-white/10 rounded-lg cursor-pointer accent-primary"/>
-                    <button onClick={handleSaveImagePreview} className="w-full bg-primary py-3 rounded-lg font-bold text-white hover:bg-primaryHover">Confirm Preview</button>
-                 </div>
-               </div>
+              <div className="relative bg-black h-full border-r border-white/10">
+                <Cropper
+                  image={URL.createObjectURL(files[0])}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={16 / 9}
+                  onCropChange={setCrop}
+                  onCropComplete={onCropComplete}
+                  onZoomChange={setZoom}
+                />
+              </div>
+              <div className="p-6 flex flex-col justify-between bg-zinc-900">
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-muted uppercase">Public Blur Level</h4>
+                  <div className="w-full aspect-video bg-black rounded-lg overflow-hidden relative border border-white/10">
+                    <img src={URL.createObjectURL(files[0])} className="w-full h-full object-cover transition-all duration-75" style={{ filter: `blur(${blurAmount}px)`, transform: `scale(${zoom})` }} />
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <input type="range" min="0" max="25" value={blurAmount} onChange={(e) => setBlurAmount(Number(e.target.value))} className="w-full h-2 bg-white/10 rounded-lg cursor-pointer accent-primary" />
+                  <button onClick={handleSaveImagePreview} className="w-full bg-primary py-3 rounded-lg font-bold text-white hover:bg-primaryHover">Confirm Preview</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -243,26 +244,26 @@ export function SellForm() {
           <input type="file" multiple onChange={onFileSelect} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
           {files.length > 0 ? (
             <div className="space-y-4">
-               <div className="relative w-full h-40 bg-black/40 rounded-lg overflow-hidden border border-white/10 flex items-center justify-center">
-                 {(files.length > 1 || files[0].name.endsWith('.zip')) ? (
-                   <div className="text-center text-primary">
-                     <Archive size={40} className="mx-auto mb-2" />
-                     <p className="text-xs font-bold text-white">{files.length > 1 ? `${files.length} Files Ready` : "ZIP Archive"}</p>
-                   </div>
-                 ) : previewUrl ? (
-                    files[0].type.startsWith("audio/") ? (
-                      <div className="text-center text-primary"><FileAudio size={40} className="mx-auto mb-2"/><p className="text-[10px] text-muted">Preview Generated</p></div>
-                    ) : (
-                      <img src={previewUrl} className="w-full h-full object-cover" />
-                    )
-                 ) : (
-                    <div className="text-center text-muted">
-                      <FileText size={40} className="mx-auto mb-2"/>
-                      <p className="text-[10px]">{generatedInfo || "Validating..."}</p>
-                    </div>
-                 )}
-               </div>
-               <p className="font-bold text-white truncate px-4">{files.length > 1 ? "Multiple Assets" : files[0].name}</p>
+              <div className="relative w-full h-40 bg-black/40 rounded-lg overflow-hidden border border-white/10 flex items-center justify-center">
+                {(files.length > 1 || files[0].name.endsWith('.zip')) ? (
+                  <div className="text-center text-primary">
+                    <Archive size={40} className="mx-auto mb-2" />
+                    <p className="text-xs font-bold text-white">{files.length > 1 ? `${files.length} Files Ready` : "ZIP Archive"}</p>
+                  </div>
+                ) : previewUrl ? (
+                  files[0].type.startsWith("audio/") ? (
+                    <div className="text-center text-primary"><FileAudio size={40} className="mx-auto mb-2" /><p className="text-[10px] text-muted">Preview Generated</p></div>
+                  ) : (
+                    <img src={previewUrl} className="w-full h-full object-cover" />
+                  )
+                ) : (
+                  <div className="text-center text-muted">
+                    <FileText size={40} className="mx-auto mb-2" />
+                    <p className="text-[10px]">{generatedInfo || "Validating..."}</p>
+                  </div>
+                )}
+              </div>
+              <p className="font-bold text-white truncate px-4">{files.length > 1 ? "Multiple Assets" : files[0].name}</p>
             </div>
           ) : (
             <div className="space-y-3 py-4">
@@ -275,14 +276,14 @@ export function SellForm() {
 
         {/* Custom Cover Fallback */}
         {(files.length > 1 || (files[0] && !previewUrl && !files[0].type.startsWith("image/"))) && (
-           <div className="flex items-center gap-4 bg-surface p-4 rounded-xl border border-border">
-             <ImageIcon size={20} className="text-primary" />
-             <div className="flex-1 text-left">
-                <p className="text-sm font-bold text-white">Marketplace Cover</p>
-                <p className="text-[10px] text-muted">Visible to all users before purchase</p>
-             </div>
-             <input type="file" accept="image/*" onChange={(e) => setCustomCover(e.target.files?.[0] || null)} className="text-xs text-muted max-w-[150px]"/>
-           </div>
+          <div className="flex items-center gap-4 bg-surface p-4 rounded-xl border border-border">
+            <ImageIcon size={20} className="text-primary" />
+            <div className="flex-1 text-left">
+              <p className="text-sm font-bold text-white">Marketplace Cover</p>
+              <p className="text-[10px] text-muted">Visible to all users before purchase</p>
+            </div>
+            <input type="file" accept="image/*" onChange={(e) => setCustomCover(e.target.files?.[0] || null)} className="text-xs text-muted max-w-[150px]" />
+          </div>
         )}
 
         {/* Details Grid */}
@@ -292,7 +293,9 @@ export function SellForm() {
             <input required type="text" placeholder="e.g. Masterclass Video" onChange={e => setName(e.target.value)} className="w-full bg-surface border border-border rounded-lg p-3 text-white outline-none focus:border-primary transition-all" />
           </div>
           <div className="space-y-2">
-            <label className="text-xs font-bold text-muted uppercase tracking-wider">Price (MOCK)</label>
+            <label className="text-xs font-bold text-muted uppercase tracking-wider">
+              Price ({chain?.id === 5042002 ? "USDC" : chain?.id === 421614 ? "ETH" : "MOCK"})
+            </label>
             <input required type="number" step="0.0001" placeholder="0.05" onChange={e => setPrice(e.target.value)} className="w-full bg-surface border border-border rounded-lg p-3 text-white outline-none focus:border-primary transition-all" />
           </div>
           <div className="space-y-2 col-span-2">
@@ -301,14 +304,14 @@ export function SellForm() {
           </div>
         </div>
 
-        <button 
-          disabled={status !== "idle" || files.length === 0} 
+        <button
+          disabled={status !== "idle" || files.length === 0}
           className="w-full bg-primary hover:bg-primaryHover text-white py-4 rounded-xl font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2 group"
         >
           {status === "idle" ? (
-            <>Secure & List Listing <ShieldCheck size={18} className="group-hover:scale-110 transition-transform"/></>
+            <>Secure & List Listing <ShieldCheck size={18} className="group-hover:scale-110 transition-transform" /></>
           ) : (
-            <><Loader2 className="animate-spin" size={18}/> Processing {status}...</>
+            <><Loader2 className="animate-spin" size={18} /> Processing {status}...</>
           )}
         </button>
       </form>

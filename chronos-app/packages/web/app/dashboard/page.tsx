@@ -2,16 +2,18 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useAccount, useReadContract, useWriteContract, useWatchContractEvent, usePublicClient, useReadContracts, useSignMessage } from "wagmi";
-import { parseAbiItem, formatEther } from "viem";
+import { useAccount, useWriteContract, useSignMessage, useSwitchChain } from "wagmi";
+import { parseAbiItem, formatEther, createPublicClient, http } from "viem";
 import { Navigation } from "../../components/Navigation";
 import { Footer } from "../../components/Footer";
-import { PAYLOCK_ABI, getContractAddress } from "../../lib/contracts";
+import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "../../lib/contracts"; // Updated import
 import { signatureToKey, decryptFile } from "@/lib/crypto";
 import { fetchIPFS } from "@/lib/ipfs";
 import { getSellerSettings } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { Terminal, Key, ShoppingBag, Plus, Archive, Coins, Shield, CheckCircle2, AlertCircle, X, Loader2, RefreshCw, Download, Clock, Ban, ArrowUpRight, ArrowDownLeft, Trash2 } from "lucide-react";
+import { datahaven, arcTestnet } from '@/lib/chains'; // Add these imports
+import { arbitrumSepolia } from 'wagmi/chains'; // Add this import
+import { Terminal, Key, ShoppingBag, Plus, Archive, Coins, Shield, CheckCircle2, AlertCircle, X, Loader2, RefreshCw, Download, Clock, Ban, ArrowUpRight, ArrowDownLeft, Trash2, Globe } from "lucide-react";
 
 // --- Components ---
 function Toast({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) {
@@ -59,238 +61,210 @@ const formatTimeAgo = (timestamp: number | undefined) => {
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
-  const { address, chain } = useAccount();
+  const { address, chain: walletChain } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const { signMessageAsync } = useSignMessage();
-  const publicClient = usePublicClient();
+  const { switchChainAsync } = useSwitchChain();
 
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
-  // Event State
-  const [salesEvents, setSalesEvents] = useState<any[]>([]);
-  const [deliveryEvents, setDeliveryEvents] = useState<any[]>([]);
-  const [cancelledEvents, setCancelledEvents] = useState<any[]>([]);
-  const [listingEvents, setListingEvents] = useState<any[]>([]);
-  const [blockTimestamps, setBlockTimestamps] = useState<Record<string, number>>({});
+  // Multi-Chain State
+  const [unifiedItems, setUnifiedItems] = useState<any[]>([]);
 
-  const activeContract = getContractAddress(chain?.id);
-
-  // 1. Read Current Items
-  const { data: rawItems, refetch: refetchItems } = useReadContract({
-    address: activeContract,
-    abi: PAYLOCK_ABI,
-    functionName: 'getMarketplaceItems',
-  });
-  const allItems = (rawItems as any[]) || [];
-
-  const { data: ownershipData } = useReadContracts({
-    contracts: allItems.map((item) => ({
-      address: activeContract,
-      abi: PAYLOCK_ABI,
-      functionName: 'checkOwnership',
-      args: [item.id, address],
-    })),
-    query: { enabled: !!address && allItems.length > 0 }
-  });
-
-  // Auto-deliver function
-  const autoDeliverKey = async (itemId: bigint, itemName: string, buyer: string) => {
+  // 1. Fetch Multi-Chain Data
+  const fetchMultiChainHistory = async () => {
     if (!address) return;
-
-    try {
-      // Get settings from Supabase (with localStorage fallback)
-      const settings = await getSellerSettings(address, itemName);
-
-      // Check if auto-deliver is enabled
-      if (!settings.autoDeliver) return;
-
-      // Check if we have the key
-      if (!settings.encryptionKey) return;
-
-      // Deliver the key automatically
-      await writeContractAsync({
-        address: activeContract,
-        abi: PAYLOCK_ABI,
-        functionName: 'deliverKey',
-        args: [itemId, buyer, settings.encryptionKey] as any
-      });
-
-      setToast({ message: `Auto-delivered key for "${itemName}"`, type: 'success' });
-    } catch (e: any) {
-      console.error('Auto-deliver failed:', e);
-      setToast({ message: `Auto-deliver failed for "${itemName}"`, type: 'error' });
-    }
-  };
-
-  // Watchers
-  useWatchContractEvent({
-    address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemPurchased',
-    onLogs: (logs) => {
-      refetchItems();
-      fetchHistory();
-
-      // Check for auto-delivery
-      logs.forEach((log: any) => {
-        if (log.args?.id && log.args?.buyer) {
-          // Find the item to get its name
-          const item = allItems.find((i: any) => i.id.toString() === log.args.id.toString());
-          if (item && item.seller.toLowerCase() === address?.toLowerCase()) {
-            autoDeliverKey(log.args.id, item.name, log.args.buyer);
-          }
-        }
-      });
-    }
-  });
-  useWatchContractEvent({
-    address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemCanceled',
-    onLogs: () => { refetchItems(); fetchHistory(); }
-  });
-  useWatchContractEvent({
-    address: activeContract, abi: PAYLOCK_ABI, eventName: 'ItemListed',
-    onLogs: () => { refetchItems(); fetchHistory(); }
-  });
-
-  // 2. Fetch History (Chunked)
-  const fetchHistory = async () => {
-    if (!publicClient || !activeContract) return;
     setLoadingHistory(true);
-    try {
-      const currentBlock = await publicClient.getBlockNumber();
-      // INCREASED: Scan more blocks to find all items
-      const SCAN_DEPTH = BigInt(100000);
-      const CHUNK_SIZE = BigInt(5000);
-      let fromBlock = currentBlock - SCAN_DEPTH > BigInt(0) ? currentBlock - SCAN_DEPTH : BigInt(0);
 
-      const fetchLogsInChunks = async (eventName: string) => {
-        let logs: any[] = [];
-        for (let i = fromBlock; i < currentBlock; i += CHUNK_SIZE) {
-          const to = (i + CHUNK_SIZE) > currentBlock ? currentBlock : (i + CHUNK_SIZE);
-          try {
-            const chunk = await publicClient.getLogs({
-              address: activeContract,
-              event: parseAbiItem(eventName) as any,
-              fromBlock: i,
-              toBlock: to
+    const chains = [datahaven, arcTestnet, arbitrumSepolia];
+    const allEvents: any[] = [];
+
+    await Promise.all(chains.map(async (chain) => {
+      const contractAddr = CONTRACT_ADDRESSES[chain.id];
+      if (!contractAddr) return;
+
+      try {
+        const client = createPublicClient({ chain, transport: http() });
+        const currentBlock = await client.getBlockNumber();
+
+        // 1. Fetch All Items on this chain
+        let chainItems: any[] = [];
+        try {
+          chainItems = await client.readContract({
+            address: contractAddr,
+            abi: PAYLOCK_ABI,
+            functionName: 'getMarketplaceItems',
+          }) as any[];
+        } catch (e) {
+          console.warn(`Failed to fetch items from ${chain.name}`, e);
+          return;
+        }
+
+        // 2. Scan Logs for history
+        const SCAN_DEPTH = BigInt(100000);
+        const CHUNK_SIZE = BigInt(5000);
+        let fromBlock = currentBlock - SCAN_DEPTH > BigInt(0) ? currentBlock - SCAN_DEPTH : BigInt(0);
+
+        const fetchLogsInChunks = async (eventName: string) => {
+          let logs: any[] = [];
+          for (let i = fromBlock; i < currentBlock; i += CHUNK_SIZE) {
+            const to = (i + CHUNK_SIZE) > currentBlock ? currentBlock : (i + CHUNK_SIZE);
+            try {
+              const chunk = await client.getLogs({
+                address: contractAddr,
+                event: parseAbiItem(eventName) as any,
+                fromBlock: i,
+                toBlock: to
+              });
+              logs = [...logs, ...chunk];
+            } catch (e) { }
+          }
+          return logs;
+        };
+
+        const [pLogs, dLogs, cLogs, lLogs] = await Promise.all([
+          fetchLogsInChunks('event ItemPurchased(uint256 indexed id, address indexed buyer)'),
+          fetchLogsInChunks('event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey)'),
+          fetchLogsInChunks('event ItemCanceled(uint256 indexed id, address indexed seller)'),
+          fetchLogsInChunks('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)')
+        ]);
+
+        // 3. Batch fetch timestamps
+        const relevantBlocks = new Set([
+          ...pLogs.map(l => l.blockNumber),
+          ...dLogs.map(l => l.blockNumber),
+          ...cLogs.map(l => l.blockNumber),
+          ...lLogs.map(l => l.blockNumber)
+        ]);
+        const blockTimestamps: Record<string, number> = {};
+        const uniqueBlocks = Array.from(relevantBlocks);
+
+        const BATCH_SIZE = 10;
+        for (let i = 0; i < uniqueBlocks.length; i += BATCH_SIZE) {
+          const batch = uniqueBlocks.slice(i, i + BATCH_SIZE);
+          await Promise.all(batch.map(async (bn) => {
+            try {
+              const block = await client.getBlock({ blockNumber: bn });
+              if (block && block.timestamp) blockTimestamps[bn.toString()] = Number(block.timestamp);
+            } catch { }
+          }));
+        }
+
+        // 4. Process Items for Feed
+        for (const item of chainItems) {
+          const itemId = item.id.toString();
+          const isMyListing = item.seller.toLowerCase() === address.toLowerCase();
+
+          // Check Ownership (for purchases)
+          let isMyPurchase = false;
+          let myKey = "";
+          if (!isMyListing) { // Optimize: don't check ownership if I'm the seller (usually) - actually I can buy my own stuff for testing
+            try {
+              const [bought, key] = await client.readContract({
+                address: contractAddr,
+                abi: PAYLOCK_ABI,
+                functionName: 'checkOwnership',
+                args: [item.id, address]
+              }) as [boolean, string];
+              isMyPurchase = bought;
+              myKey = key;
+            } catch { }
+          }
+
+          const currency = chain.id === 5042002 ? "USDC" : chain.id === 421614 ? "ETH" : "MOCK";
+
+          // Event: I SOLD something
+          if (isMyListing) {
+            const sales = pLogs.filter((l: any) => l.args.id.toString() === itemId);
+            sales.forEach((sale: any) => {
+              const isDelivered = dLogs.some((d: any) => d.args.id.toString() === itemId && d.args.buyer === sale.args.buyer);
+              const timestamp = blockTimestamps[sale.blockNumber.toString()];
+              allEvents.push({
+                ...item,
+                uniqueId: `${chain.id}-${itemId}-SALE-${sale.args.buyer}`,
+                type: 'SALE',
+                buyer: sale.args.buyer,
+                isDelivered,
+                timestamp,
+                chainId: chain.id,
+                chainName: chain.name,
+                currency
+              });
             });
-            logs = [...logs, ...chunk];
-          } catch (e) {
-            console.warn(`Failed to fetch logs chunk ${i}-${to}:`, e);
+
+            const isCanceled = !item.isActive;
+            // Only show 'Listed' event if active and not sold out? Or just show latest status
+            // Let's show "Listed" or "Archived" entry
+            const listingLog = lLogs.find((l: any) => l.args.id.toString() === itemId);
+            const listTime = listingLog ? blockTimestamps[listingLog.blockNumber.toString()] : 0;
+
+            // If I listed it, show it
+            allEvents.push({
+              ...item,
+              uniqueId: `${chain.id}-${itemId}-LISTING`,
+              type: isCanceled ? 'CANCELED' : 'LISTED',
+              buyer: null,
+              isCanceled,
+              timestamp: listTime,
+              chainId: chain.id,
+              chainName: chain.name,
+              currency
+            });
+          }
+
+          // Event: I BOUGHT something
+          if (isMyPurchase) {
+            const purchaseLog = pLogs.find((l: any) => l.args.id.toString() === itemId && l.args.buyer.toLowerCase() === address.toLowerCase());
+            const timestamp = purchaseLog ? blockTimestamps[purchaseLog.blockNumber.toString()] : 0;
+            allEvents.push({
+              ...item,
+              uniqueId: `${chain.id}-${itemId}-BOUGHT`,
+              type: 'BOUGHT',
+              buyer: address,
+              hasKey: !!(myKey && myKey.length > 0),
+              receivedKey: myKey,
+              timestamp,
+              chainId: chain.id,
+              chainName: chain.name,
+              currency
+            });
           }
         }
-        return logs;
-      };
 
-      const [pLogs, dLogs, cLogs, lLogs] = await Promise.all([
-        fetchLogsInChunks('event ItemPurchased(uint256 indexed id, address indexed buyer)'),
-        fetchLogsInChunks('event KeyDelivered(uint256 indexed id, address indexed buyer, string encryptedKey)'),
-        fetchLogsInChunks('event ItemCanceled(uint256 indexed id, address indexed seller)'),
-        fetchLogsInChunks('event ItemListed(uint256 indexed id, address indexed seller, uint256 price, string name, uint256 maxSupply)')
-      ]);
-
-      const allBlockNumbers = Array.from(new Set([
-        ...pLogs.map(l => l.blockNumber),
-        ...dLogs.map(l => l.blockNumber),
-        ...cLogs.map(l => l.blockNumber),
-        ...lLogs.map(l => l.blockNumber)
-      ])) as bigint[];
-
-      const timestampMap: Record<string, number> = {};
-
-      // Fetch ALL block timestamps in batches
-      const BATCH_SIZE = 10;
-      for (let i = 0; i < allBlockNumbers.length; i += BATCH_SIZE) {
-        const batch = allBlockNumbers.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(async (bn) => {
-          try {
-            const block = await publicClient.getBlock({ blockNumber: bn });
-            if (block && block.timestamp) {
-              timestampMap[bn.toString()] = Number(block.timestamp);
-            }
-          } catch (e) {
-            console.warn(`Failed to fetch block ${bn}:`, e);
-          }
-        }));
+      } catch (e) {
+        console.error(`Error processing chain ${chain.name}`, e);
       }
+    }));
 
-      setBlockTimestamps(timestampMap);
-      setSalesEvents(pLogs.map(l => ({ id: l.args.id?.toString(), buyer: l.args.buyer, block: l.blockNumber })));
-      setDeliveryEvents(dLogs.map(l => ({ id: l.args.id?.toString(), buyer: l.args.buyer, block: l.blockNumber })));
-      setCancelledEvents(cLogs.map(l => ({ id: l.args.id?.toString(), block: l.blockNumber })));
-      setListingEvents(lLogs.map(l => ({ id: l.args.id?.toString(), block: l.blockNumber })));
-
-    } catch (e) {
-      console.error("Error fetching history:", e);
-    } finally {
-      setLoadingHistory(false);
-    }
+    setUnifiedItems(allEvents.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
+    setLoadingHistory(false);
   };
 
   useEffect(() => {
-    if (publicClient && activeContract) { fetchHistory(); }
+    fetchMultiChainHistory();
+    const interval = setInterval(fetchMultiChainHistory, 15000); // Poll every 15s
     setMounted(true);
-  }, [publicClient, activeContract, chain?.id]);
+    return () => clearInterval(interval);
+  }, [address]);
 
-  // 3. Unified Feed Logic
-  const unifiedFeed = useMemo(() => {
-    if (!address) return [];
-    const feed: any[] = [];
 
-    allItems.forEach((item: any, index: number) => {
-      const itemId = item.id.toString();
-      const eventCancelled = cancelledEvents.some(c => c.id === itemId);
-      const isCanceled = !item.isActive || eventCancelled;
-
-      if (item.seller.toLowerCase() === address.toLowerCase()) {
-        const itemSales = salesEvents.filter(s => s.id === itemId);
-        itemSales.forEach(sale => {
-          const isDelivered = deliveryEvents.some(d => d.id === itemId && d.buyer === sale.buyer);
-          feed.push({
-            ...item, type: 'SALE', buyer: sale.buyer, isDelivered, isCanceled,
-            timestamp: blockTimestamps[sale.block?.toString()]
-          });
-        });
-
-        const creation = listingEvents.find(l => l.id === itemId);
-        if (creation || !creation) {
-          feed.push({
-            ...item, type: isCanceled ? 'CANCELED' : 'LISTED', buyer: null, isCanceled,
-            timestamp: creation ? blockTimestamps[creation.block?.toString()] : 0
-          });
-        }
-      }
-
-      const ownership = ownershipData?.[index]?.result as [boolean, string] | undefined;
-      const myPurchaseEvent = salesEvents.find(s => s.id === itemId && s.buyer.toLowerCase() === address.toLowerCase());
-
-      if (ownership && ownership[0] === true) {
-        feed.push({
-          ...item,
-          type: 'BOUGHT',
-          buyer: address,
-          isCanceled,
-          hasKey: !!(ownership[1] && ownership[1].length > 0),
-          receivedKey: ownership[1], // CRITICAL: Pass Key
-          timestamp: myPurchaseEvent ? blockTimestamps[myPurchaseEvent.block?.toString()] : undefined
-        });
-      }
-    });
-
-    return feed.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-  }, [allItems, salesEvents, deliveryEvents, listingEvents, cancelledEvents, blockTimestamps, address, ownershipData]);
-
-  const stats = useMemo(() => unifiedFeed.reduce((acc, item) => {
+  const stats = useMemo(() => unifiedItems.reduce((acc, item) => {
     if (item.type === 'SALE') { acc.sold++; acc.revenue += Number(formatEther(item.price || BigInt(0))); }
     if (item.type === 'BOUGHT') { acc.bought++; }
     return acc;
-  }, { sold: 0, revenue: 0, bought: 0 }), [unifiedFeed]);
+  }, { sold: 0, revenue: 0, bought: 0 }), [unifiedItems]);
 
   // Handlers
   const handleDeliver = async (item: any) => {
     try {
-      setProcessingId(item.id.toString());
+      if (walletChain?.id !== item.chainId) {
+        await switchChainAsync({ chainId: item.chainId });
+      }
+
+      setProcessingId(item.uniqueId);
       const localKeys = JSON.parse(localStorage.getItem('chronos_seller_keys') || '{}');
       let storedKey = localKeys[item.name.trim()];
 
@@ -299,15 +273,19 @@ export default function DashboardPage() {
         storedKey = signatureToKey(signature);
       }
 
+      const contractAddr = CONTRACT_ADDRESSES[item.chainId];
+
       await writeContractAsync({
-        address: activeContract,
+        address: contractAddr,
         abi: PAYLOCK_ABI,
         functionName: 'deliverKey',
-        args: [BigInt(item.id), item.buyer, storedKey] as any
+        args: [BigInt(item.id), item.buyer, storedKey] as any,
+        chainId: item.chainId
       });
 
       setToast({ message: "Key Transmitted Successfully!", type: 'success' });
-      fetchHistory();
+      // Short delay to let indexer/poll catch up usually, or just optimistic update?
+      // For now just wait for poll
     } catch (e: any) {
       setToast({ message: e.message || "Delivery Failed", type: 'error' });
     } finally {
@@ -318,7 +296,7 @@ export default function DashboardPage() {
   const handleDownload = async (item: any) => {
     if (!item.hasKey) return;
     try {
-      setDownloadingId(item.id.toString());
+      setDownloadingId(item.uniqueId);
       setToast({ message: "Fetching & Decrypting...", type: 'success' });
 
       const encryptedBlob = await fetchIPFS(item.ipfsCid);
@@ -344,17 +322,21 @@ export default function DashboardPage() {
   const handleCancel = async (item: any) => {
     if (!confirm("Cancel listing?")) return;
     try {
-      setProcessingId(item.id.toString());
+      if (walletChain?.id !== item.chainId) {
+        await switchChainAsync({ chainId: item.chainId });
+      }
+
+      setProcessingId(item.uniqueId);
+      const contractAddr = CONTRACT_ADDRESSES[item.chainId];
+
       await writeContractAsync({
-        address: activeContract,
+        address: contractAddr,
         abi: PAYLOCK_ABI,
         functionName: 'cancelListing',
-        args: [BigInt(item.id)]
+        args: [BigInt(item.id)],
+        chainId: item.chainId
       });
       setToast({ message: "Listing Cancelled!", type: 'success' });
-      setCancelledEvents(prev => [...prev, { id: item.id.toString(), block: BigInt(0) }]);
-      fetchHistory();
-      refetchItems();
     } catch (e: any) {
       setToast({ message: e.message || "Cancel Failed", type: 'error' });
     } finally {
@@ -363,7 +345,6 @@ export default function DashboardPage() {
   };
 
   if (!mounted) return null;
-  const currencySymbol = chain?.id === 5042002 ? "USDC" : "MOCK";
 
   return (
     <div className="min-h-screen bg-[#020e14] text-white font-display overflow-x-hidden flex flex-col">
@@ -382,11 +363,11 @@ export default function DashboardPage() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
-          {/* Stats Cards (Same as previous) */}
+          {/* Stats Cards (Aggregated) */}
           <div className="bg-[#0b1a24]/60 border border-white/10 rounded-xl p-6 backdrop-blur-md hover:border-primary/50 transition-all">
             <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-primary/10 text-primary"><Coins size={24} /></div></div>
-            <p className="text-gray-400 text-sm font-medium uppercase">Revenue</p>
-            <p className="text-2xl lg:text-3xl font-mono font-bold text-white mt-1">{stats.revenue.toFixed(2)} {currencySymbol}</p>
+            <p className="text-gray-400 text-sm font-medium uppercase">Est. Revenue</p>
+            <p className="text-2xl lg:text-3xl font-mono font-bold text-white mt-1">~{stats.revenue.toFixed(2)}</p>
           </div>
           <div className="bg-[#0b1a24]/60 border border-white/10 rounded-xl p-6 backdrop-blur-md hover:border-green-500/50 transition-all">
             <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-green-500/10 text-green-500"><Download size={24} /></div></div>
@@ -401,7 +382,7 @@ export default function DashboardPage() {
           <div className="bg-[#0b1a24]/60 border border-white/10 rounded-xl p-6 backdrop-blur-md hover:border-warning/50 transition-all">
             <div className="flex justify-between items-start mb-4"><div className="p-2 rounded-lg bg-warning/10 text-warning"><Key size={24} /></div></div>
             <p className="text-gray-400 text-sm font-medium uppercase">Pending</p>
-            <p className="text-2xl lg:text-3xl font-mono font-bold text-white mt-1">{unifiedFeed.filter(i => i.type === 'SALE' && !i.isDelivered).length}</p>
+            <p className="text-2xl lg:text-3xl font-mono font-bold text-white mt-1">{unifiedItems.filter(i => i.type === 'SALE' && !i.isDelivered).length}</p>
           </div>
         </div>
 
@@ -424,14 +405,14 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {unifiedFeed.map((item, i) => {
+                {unifiedItems.map((item, i) => {
                   const isSale = item.type === 'SALE';
                   const isBought = item.type === 'BOUGHT';
                   const isListed = item.type === 'LISTED';
                   const isCanceled = item.type === 'CANCELED' || item.isCanceled;
 
                   return (
-                    <tr key={`${item.type}-${i}`} className="group hover:bg-white/5 transition-colors">
+                    <tr key={item.uniqueId || `${item.type}-${i}`} className="group hover:bg-white/5 transition-colors">
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
                           <div className={cn("p-2 rounded-lg border",
@@ -443,7 +424,17 @@ export default function DashboardPage() {
                             {isSale ? <ArrowDownLeft size={16} /> : isBought ? <ShoppingBag size={16} /> : isCanceled ? <Ban size={16} /> : <Plus size={16} />}
                           </div>
                           <div>
-                            <p className="font-bold text-white text-sm">{item.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-white text-sm">{item.name}</p>
+                              <span className={cn(
+                                "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold border",
+                                item.chainId === 55931 ? "bg-cyan-900/50 text-cyan-400 border-cyan-500/30" :
+                                  item.chainId === 5042002 ? "bg-blue-900/50 text-blue-400 border-blue-500/30" :
+                                    "bg-orange-900/50 text-orange-400 border-orange-500/30"
+                              )}>
+                                <Globe size={8} /> {item.chainId === 55931 ? "DH" : item.chainId === 5042002 ? "ARC" : "ARB"}
+                              </span>
+                            </div>
                             <p className="text-[10px] text-gray-500 font-mono uppercase">{item.type} • ID #{item.id}</p>
                           </div>
                         </div>
@@ -451,7 +442,7 @@ export default function DashboardPage() {
                       <td className="py-4 px-6 text-right font-mono font-bold text-sm text-white">
                         {isSale || isBought ? (
                           <span className={isSale ? "text-green-400" : "text-red-400"}>
-                            {isSale ? "+" : "-"}{formatEther(item.price)} {currencySymbol}
+                            {isSale ? "+" : "-"}{formatEther(item.price)} <span className="text-xs text-white/50">{item.currency}</span>
                           </span>
                         ) : <span className="text-gray-600">-</span>}
                       </td>
@@ -475,7 +466,7 @@ export default function DashboardPage() {
                             disabled={!!processingId}
                             className="bg-primary hover:bg-white text-black px-4 py-2 rounded-lg text-xs font-bold shadow-neon transition-all flex items-center justify-center gap-2 ml-auto hover:scale-105 active:scale-95"
                           >
-                            {processingId === item.id.toString() ? <Loader2 className="animate-spin" size={14} /> : <Key size={14} />}
+                            {processingId === item.uniqueId ? <Loader2 className="animate-spin" size={14} /> : <Key size={14} />}
                             DELIVER KEY
                           </button>
                         )}
@@ -487,7 +478,7 @@ export default function DashboardPage() {
                             disabled={!!processingId}
                             className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ml-auto hover:scale-105 active:scale-95"
                           >
-                            {processingId === item.id.toString() ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+                            {processingId === item.uniqueId ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
                             CANCEL
                           </button>
                         )}
@@ -496,10 +487,10 @@ export default function DashboardPage() {
                         {isBought && item.hasKey && (
                           <button
                             onClick={() => handleDownload(item)}
-                            disabled={downloadingId === item.id.toString()}
+                            disabled={downloadingId === item.uniqueId}
                             className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded text-xs font-bold border border-white/10 ml-auto flex gap-2 items-center transition-colors"
                           >
-                            {downloadingId === item.id.toString() ? <Loader2 className="animate-spin" size={12} /> : <Download size={12} />}
+                            {downloadingId === item.uniqueId ? <Loader2 className="animate-spin" size={12} /> : <Download size={12} />}
                             Download
                           </button>
                         )}

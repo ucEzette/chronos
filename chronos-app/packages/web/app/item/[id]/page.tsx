@@ -454,7 +454,7 @@ export default function ItemDetailsPage() {
             <div className="mt-auto pt-6 border-t border-white/10">
               <div className="flex justify-between items-end mb-6">
                 <span className="text-sm text-gray-400 font-bold uppercase">Price</span>
-                <span className="text-4xl font-black text-white tracking-tight">{formatEther(item.price)} <span className="text-lg text-primary">MOCK</span></span>
+                <span className="text-4xl font-black text-white tracking-tight">{formatEther(item.price)} <span className="text-lg text-primary">{targetChainId === 5042002 ? "USDC" : targetChainId === 421614 ? "ETH" : "MOCK"}</span></span>
               </div>
 
               {isOwner ? (

@@ -3,17 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
 import {
     Shield, Flag, Eye, EyeOff, Ban, CheckCircle, XCircle,
     AlertTriangle, Clock, Search, Filter, RefreshCw,
     ChevronDown, ExternalLink, Loader2, Trash2, UserX
 } from "lucide-react";
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "admin123";
 
@@ -104,6 +99,7 @@ export default function ModerationPage() {
     const fetchReports = useCallback(async () => {
         setIsLoading(true);
         try {
+            if (!supabase) return;
             let query = supabase
                 .from("content_reports")
                 .select("*")
@@ -130,6 +126,7 @@ export default function ModerationPage() {
     const fetchModeratedItems = useCallback(async () => {
         setIsLoading(true);
         try {
+            if (!supabase) return;
             const { data, error } = await supabase
                 .from("moderated_content")
                 .select("*")
@@ -148,6 +145,7 @@ export default function ModerationPage() {
     const fetchBannedUsers = useCallback(async () => {
         setIsLoading(true);
         try {
+            if (!supabase) return;
             const { data, error } = await supabase
                 .from("banned_users")
                 .select("*")
@@ -179,6 +177,8 @@ export default function ModerationPage() {
             // Update report status
             const newStatus = action === "reject" ? "rejected" : "actioned";
             const actionTaken = action === "approve" ? "none" : action === "hide" ? "hidden" : action === "remove" ? "removed" : action === "ban" ? "banned" : "none";
+
+            if (!supabase) throw new Error("Supabase not configured");
 
             await supabase
                 .from("content_reports")
@@ -227,6 +227,7 @@ export default function ModerationPage() {
     // Remove moderation
     const handleUnmoderate = async (item: ModeratedItem) => {
         try {
+            if (!supabase) throw new Error("Supabase not configured");
             await supabase.from("moderated_content").delete().eq("id", item.id);
             fetchModeratedItems();
         } catch (err) {
@@ -237,6 +238,7 @@ export default function ModerationPage() {
     // Unban user
     const handleUnban = async (user: BannedUser) => {
         try {
+            if (!supabase) throw new Error("Supabase not configured");
             await supabase.from("banned_users").delete().eq("id", user.id);
             fetchBannedUsers();
         } catch (err) {
@@ -327,8 +329,8 @@ export default function ModerationPage() {
                             key={tab.key}
                             onClick={() => setActiveTab(tab.key as any)}
                             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${activeTab === tab.key
-                                    ? "bg-red-500/10 text-red-400 border border-red-500/30"
-                                    : "hover:bg-white/5"
+                                ? "bg-red-500/10 text-red-400 border border-red-500/30"
+                                : "hover:bg-white/5"
                                 }`}
                         >
                             <tab.icon size={18} />
@@ -402,8 +404,8 @@ export default function ModerationPage() {
                                     <div
                                         key={report.id}
                                         className={`p-4 rounded-xl border transition-all cursor-pointer ${selectedReport?.id === report.id
-                                                ? "border-red-500/50 bg-red-500/5"
-                                                : "border-white/10 hover:border-white/20 bg-white/5"
+                                            ? "border-red-500/50 bg-red-500/5"
+                                            : "border-white/10 hover:border-white/20 bg-white/5"
                                             }`}
                                         onClick={() => setSelectedReport(report)}
                                     >

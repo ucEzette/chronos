@@ -1,15 +1,12 @@
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { supabase } from "@/lib/supabase";
 
 /**
  * Check if an item has been moderated (hidden or removed)
  */
 export async function isItemModerated(itemId: string, chainId: number): Promise<{ moderated: boolean; action?: string }> {
     try {
+        if (!supabase) return { moderated: false };
+
         const { data, error } = await supabase
             .from("moderated_content")
             .select("action")
@@ -37,6 +34,8 @@ export async function isItemModerated(itemId: string, chainId: number): Promise<
  */
 export async function isUserBanned(walletAddress: string): Promise<{ banned: boolean; reason?: string; permanent?: boolean }> {
     try {
+        if (!supabase) return { banned: false };
+
         const { data, error } = await supabase
             .from("banned_users")
             .select("reason, permanent, expires_at")
@@ -80,6 +79,8 @@ export async function getModerationStats(): Promise<{
     totalBanned: number;
 }> {
     try {
+        if (!supabase) return { pendingReports: 0, totalModerated: 0, totalBanned: 0 };
+
         const [reportsRes, moderatedRes, bannedRes] = await Promise.all([
             supabase.from("content_reports").select("id", { count: "exact" }).eq("status", "pending"),
             supabase.from("moderated_content").select("id", { count: "exact" }),
@@ -110,6 +111,8 @@ export async function submitReport(report: {
     description?: string;
 }): Promise<{ success: boolean; error?: string }> {
     try {
+        if (!supabase) throw new Error("Supabase not configured");
+
         const { error } = await supabase.from("content_reports").insert({
             item_id: report.itemId,
             chain_id: report.chainId,

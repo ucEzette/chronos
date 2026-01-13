@@ -360,7 +360,7 @@ export default function CreateListingPage() {
    const [blurAmount, setBlurAmount] = useState(0);
    const [zoomLevel, setZoomLevel] = useState(100);
 
-   const currencySymbol = chain?.id === 5042002 ? "USDC" : "MOCK";
+   const currencySymbol = chain?.id === 5042002 ? "USDC" : chain?.id === 421614 ? "ETH" : "MOCK";
 
    const DRAFT_STORAGE_KEY = 'oneroad_listing_draft';
 

@@ -2,12 +2,7 @@
 
 import { useState } from "react";
 import { X, AlertTriangle, Flag, Shield, Send, Loader2 } from "lucide-react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { supabase } from "@/lib/supabase";
 
 interface ReportModalProps {
     isOpen: boolean;
@@ -53,6 +48,8 @@ export function ReportModal({
         setError(null);
 
         try {
+            if (!supabase) throw new Error("Reporting service unavailable");
+
             const { error: submitError } = await supabase
                 .from("content_reports")
                 .insert({
@@ -132,8 +129,8 @@ export function ReportModal({
                                         key={reason.value}
                                         onClick={() => setSelectedReason(reason.value)}
                                         className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${selectedReason === reason.value
-                                                ? "border-red-500/50 bg-red-500/10"
-                                                : "border-white/10 hover:border-white/20 hover:bg-white/5"
+                                            ? "border-red-500/50 bg-red-500/10"
+                                            : "border-white/10 hover:border-white/20 hover:bg-white/5"
                                             }`}
                                     >
                                         <span className="text-xl">{reason.icon}</span>

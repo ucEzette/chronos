@@ -175,7 +175,7 @@ export function Navigation() {
 
   const SUPPORTED_CHAINS = [55931, 5042002, 421614];
   const isWrongNetwork = isConnected && chain && !SUPPORTED_CHAINS.includes(chain.id);
-  const currencySymbol = chain?.id === 5042002 ? "USDC" : "MOCK"; // Note: Arb uses ETH/MOCK for now
+  const currencySymbol = chain?.id === 5042002 ? "USDC" : chain?.id === 421614 ? "ETH" : "MOCK";
 
   return (
     <>

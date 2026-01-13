@@ -7,6 +7,7 @@ import { formatEther, parseAbiItem, createPublicClient, http, type AbiEvent } fr
 import { Navigation } from "../../../components/Navigation";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "../../../lib/contracts";
 import { datahaven, arcTestnet } from "../../../lib/chains";
+import { arbitrumSepolia } from "wagmi/chains";
 import { Footer } from "../../../components/Footer";
 import { fetchIPFS } from "../../../lib/ipfs";
 import { decryptFile } from "@/lib/crypto";
@@ -23,7 +24,7 @@ import {
 } from "lucide-react";
 
 // --- HELPERS ---
-const SUPPORTED_CHAINS = [datahaven, arcTestnet];
+const SUPPORTED_CHAINS = [datahaven, arcTestnet, arbitrumSepolia];
 
 const formatTimeAgo = (timestamp: number | undefined) => {
   if (!timestamp) return "Pending...";
@@ -605,8 +606,12 @@ export default function ProfilePage() {
                           </span>
 
                           {/* Chain Badge */}
-                          <span className={cn("text-[9px] px-1.5 py-0.5 rounded border flex items-center gap-1", tx.chainId === 55931 ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" : "bg-blue-600/20 text-blue-400 border-blue-600/30")}>
-                            <Globe size={8} /> {tx.chainId === 55931 ? "DataHaven" : "Arc"}
+                          <span className={cn("text-[9px] px-1.5 py-0.5 rounded border flex items-center gap-1",
+                            tx.chainId === 55931 ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" :
+                              tx.chainId === 5042002 ? "bg-blue-600/20 text-blue-400 border-blue-600/30" :
+                                "bg-orange-500/20 text-orange-400 border-orange-500/30"
+                          )}>
+                            <Globe size={8} /> {tx.chainId === 55931 ? "DataHaven" : tx.chainId === 5042002 ? "Arc" : "Arbitrum"}
                           </span>
                         </h4>
                         <div className="flex items-center gap-2 mt-1">
