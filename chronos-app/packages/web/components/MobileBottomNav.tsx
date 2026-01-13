@@ -29,7 +29,7 @@ export function MobileBottomNav() {
 
                     return (
                         <button
-                            key={item.href}
+                            key={item.label}
                             onClick={() => router.push(item.href)}
                             className={cn(
                                 "flex flex-col items-center justify-center py-2 px-4 rounded-xl transition-all min-w-[60px]",

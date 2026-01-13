@@ -6,8 +6,7 @@ import { useAccount, useBalance, useEnsName, useEnsAvatar, useDisconnect } from 
 import { formatEther, parseAbiItem, createPublicClient, http, type AbiEvent } from "viem"; // FIX: Import AbiEvent type
 import { Navigation } from "../../../components/Navigation";
 import { PAYLOCK_ABI, CONTRACT_ADDRESSES } from "../../../lib/contracts";
-import { datahaven, arcTestnet } from "../../../lib/chains";
-import { arbitrumSepolia } from "wagmi/chains";
+import { datahaven, arcTestnet, arbitrumSepolia } from "../../../lib/chains";
 import { Footer } from "../../../components/Footer";
 import { fetchIPFS } from "../../../lib/ipfs";
 import { decryptFile } from "@/lib/crypto";
@@ -116,8 +115,9 @@ export default function ProfilePage() {
 
             // --- B. FETCH TRANSACTION HISTORY (Chunked) ---
             const currentBlock = await client.getBlockNumber();
-            const CHUNK_SIZE = BigInt(5000);
-            const SCAN_DEPTH = BigInt(50000); // Scan last ~1 week
+            const IS_DATAHAVEN = chain.id === 55931;
+            const CHUNK_SIZE = IS_DATAHAVEN ? BigInt(200) : BigInt(5000);
+            const SCAN_DEPTH = IS_DATAHAVEN ? BigInt(2000) : BigInt(50000); // Scan ~1 day for DH, ~1 week for others
             let fromBlock = currentBlock - SCAN_DEPTH > BigInt(0) ? currentBlock - SCAN_DEPTH : BigInt(0);
 
             // Helper to fetch logs safely
@@ -272,19 +272,23 @@ export default function ProfilePage() {
         if (isSupabaseConfigured()) {
           const supabase = getSupabase();
           if (supabase) {
-            const { data } = await supabase
+            const { data, error } = await supabase
               .from('profiles')
-              .select('twitter_verified, discord_verified, github_verified, github')
+              .select('display_name, avatar_url, bio, twitter, discord, website')
               .eq('wallet_address', profileAddress.toLowerCase())
               .single();
 
-            if (data) {
+            if (!error && data) {
               setSettings(prev => ({
                 ...prev,
-                twitterVerified: data.twitter_verified || false,
-                discordVerified: data.discord_verified || false,
-                githubVerified: data.github_verified || false,
-                github: data.github || prev.github,
+                displayName: data.display_name || "",
+                avatarUrl: data.avatar_url || "",
+                bio: data.bio || "",
+                twitterHandle: data.twitter || "",
+                discord: data.discord || "",
+                website: data.website || "",
+                twitterVerified: false, // Not supported in DB yet
+                discordVerified: false // Not supported in DB yet
               }));
             }
           }

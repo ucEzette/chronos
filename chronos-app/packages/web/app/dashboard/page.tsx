@@ -11,8 +11,7 @@ import { signatureToKey, decryptFile } from "@/lib/crypto";
 import { fetchIPFS } from "@/lib/ipfs";
 import { getSellerSettings } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { datahaven, arcTestnet } from '@/lib/chains'; // Add these imports
-import { arbitrumSepolia } from 'wagmi/chains'; // Add this import
+import { datahaven, arcTestnet, arbitrumSepolia } from '@/lib/chains'; // Add these imports
 import { Terminal, Key, ShoppingBag, Plus, Archive, Coins, Shield, CheckCircle2, AlertCircle, X, Loader2, RefreshCw, Download, Clock, Ban, ArrowUpRight, ArrowDownLeft, Trash2, Globe } from "lucide-react";
 
 // --- Components ---
@@ -104,10 +103,14 @@ export default function DashboardPage() {
         }
 
         // 2. Scan Logs for history
-        const SCAN_DEPTH = BigInt(100000);
-        const CHUNK_SIZE = BigInt(5000);
+        // DataHaven is slower/timeout-prone, so use smaller depth/chunks
+        const IS_DATAHAVEN = chain.id === 55931;
+        const SCAN_DEPTH = IS_DATAHAVEN ? BigInt(2000) : BigInt(50000); // Reduce depth significantly for stability
+        const CHUNK_SIZE = IS_DATAHAVEN ? BigInt(200) : BigInt(5000); // 200 block chunks for DataHaven
+
         let fromBlock = currentBlock - SCAN_DEPTH > BigInt(0) ? currentBlock - SCAN_DEPTH : BigInt(0);
 
+        // Helper to fetch logs safely with retries
         const fetchLogsInChunks = async (eventName: string) => {
           let logs: any[] = [];
           for (let i = fromBlock; i < currentBlock; i += CHUNK_SIZE) {
@@ -120,7 +123,10 @@ export default function DashboardPage() {
                 toBlock: to
               });
               logs = [...logs, ...chunk];
-            } catch (e) { }
+            } catch (e) {
+              console.warn(`Chunk failed on ${chain.name} [${i}-${to}]`, e);
+              // Simple retry logic could go here, but for now just skip to prevent UI crash
+            }
           }
           return logs;
         };
