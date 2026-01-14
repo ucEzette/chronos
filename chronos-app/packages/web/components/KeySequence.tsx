@@ -56,18 +56,20 @@ export function KeySequence({ progress }: KeySequenceProps) {
 
             let drawWidth, drawHeight, offsetX, offsetY;
 
+            const zoom = 1.05; // Zoom in slightly to crop out edge watermarks
+
             if (canvasRatio > imageRatio) {
-                // Canvas is wider than image -> fit width
-                drawWidth = rect.width;
-                drawHeight = rect.width / imageRatio;
-                offsetX = 0;
+                // Canvas is wider than image -> fit width (with zoom)
+                drawWidth = rect.width * zoom;
+                drawHeight = (rect.width / imageRatio) * zoom;
+                offsetX = (rect.width - drawWidth) / 2;
                 offsetY = (rect.height - drawHeight) / 2;
             } else {
-                // Canvas is taller -> fit height
-                drawHeight = rect.height;
-                drawWidth = rect.height * imageRatio;
+                // Canvas is taller -> fit height (with zoom)
+                drawHeight = rect.height * zoom;
+                drawWidth = (rect.height * imageRatio) * zoom;
                 offsetX = (rect.width - drawWidth) / 2;
-                offsetY = 0;
+                offsetY = (rect.height - drawHeight) / 2;
             }
 
             ctx.clearRect(0, 0, rect.width, rect.height);
@@ -82,7 +84,7 @@ export function KeySequence({ progress }: KeySequenceProps) {
         <div className="fixed inset-0 z-0 pointer-events-none">
             <canvas
                 ref={canvasRef}
-                className="w-full h-full object-cover opacity-80 mix-blend-screen"
+                className="w-full h-full object-cover"
             />
             {isLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black">

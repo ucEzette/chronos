@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Shield, Lock, Database, Globe, Wallet, FileKey, Download, CheckCircle } from "lucide-react";
-import { useScroll, useTransform, motion } from "framer-motion";
+import { useScroll, useTransform } from "framer-motion";
 import { Footer } from "@/components/Footer";
 import { KeySequence } from "@/components/KeySequence";
 
@@ -55,14 +55,27 @@ export default function LandingPage() {
         offset: ["start start", "end end"]
     });
 
-    const [progress, setProgress] = useState(0);
+    // Accelerate the animation: 
+    // Map scroll 0 -> 0.6 (60% of page) to animation 0 -> 1 (100% completed)
+    // This makes the key unlock/explode faster as you scroll.
+    const progress = useTransform(scrollYProgress, [0, 0.6], [0, 1]);
 
-    // Sync Framer Motion value to React state for the canvas component
+    // We can pass the motion value directly if the component supports it, 
+    // but our KeySequence expects a number. We need to sync it.
+    // However, syncing via state causes re-renders. 
+    // Best practice for performance: Pass the MotionValue to KeySequence and handle subscription there?
+    // OR just use the state sync for simplicity if performance is okay. 
+    // Given "make it fast", let's optimize:
+    // We'll pass the raw number via state but use a specialized hook or ref in KeySequence if needed.
+    // For now, let's Stick to the state sync but strictly clamp it.
+
+    const [progressValue, setProgressValue] = useState(0);
+
     useEffect(() => {
-        return scrollYProgress.on("change", (latest) => {
-            setProgress(latest);
+        return progress.on("change", (latest) => {
+            setProgressValue(latest);
         });
-    }, [scrollYProgress]);
+    }, [progress]);
 
     useEffect(() => {
         setIsLoaded(true);
@@ -71,25 +84,10 @@ export default function LandingPage() {
     return (
         <div ref={containerRef} className="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-background">
             {/* Scrollytelling Background */}
-            <KeySequence progress={progress} />
+            <KeySequence progress={progressValue} />
 
             {/* Dark Overlay to make text readable over the 3D key */}
             <div className="fixed inset-0 z-0 bg-background/80 pointer-events-none" />
-
-            {/* Video Background (Keeping it but lowering opacity significantly or removing if it clashes) */}
-            <div className="fixed inset-0 z-[-1] overflow-hidden opacity-20 mixed-blend-overlay">
-                <video
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    preload="metadata"
-                    poster="/oneroad-logo.jpg"
-                    className="absolute inset-0 w-full h-full object-cover"
-                >
-                    <source src="/oneway.webm" type="video/webm" />
-                </video>
-            </div>
 
             {/* Navigation */}
             <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-background/90 backdrop-blur-md px-4 sm:px-6 md:px-16 py-3">
