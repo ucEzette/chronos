@@ -71,8 +71,8 @@ export function Footer() {
               <li><Link href="/marketplace" className="hover:text-primary transition-colors">Marketplace</Link></li>
               <li><Link href="/create-listing" className="hover:text-primary transition-colors">Create Listing</Link></li>
               <li><Link href="/dashboard" className="hover:text-primary transition-colors">Dashboard</Link></li>
-              <li><Link href="/docs" className="hover:text-primary transition-colors">Docs</Link></li>
-              <li><Link href="/deck" className="hover:text-primary transition-colors">Deck</Link></li>
+              <li><Link href="/docs" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Docs</Link></li>
+              <li><Link href="/deck" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Deck</Link></li>
               <li><a href="#how-it-works" className="hover:text-primary transition-colors">How It Works</a></li>
             </ul>
           </div>

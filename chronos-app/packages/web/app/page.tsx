@@ -89,6 +89,7 @@ export default function LandingPage() {
                     <nav className="hidden md:flex items-center gap-8">
                         <Link href="/marketplace" className="text-sm font-semibold hover:text-primary transition-colors">Marketplace</Link>
                         <Link href="/create-listing" className="text-sm font-semibold hover:text-primary transition-colors">Create</Link>
+                        <Link href="/docs" target="_blank" className="text-sm font-semibold hover:text-primary transition-colors">Docs</Link>
                         <a href="#how-it-works" className="text-sm font-semibold hover:text-primary transition-colors">How It Works</a>
                         <a href="#features" className="text-sm font-semibold hover:text-primary transition-colors">Features</a>
                     </nav>
@@ -139,6 +140,14 @@ export default function LandingPage() {
                                 className="py-3 px-4 rounded-lg text-sm font-semibold hover:bg-white/5 transition-colors"
                             >
                                 Create Listing
+                            </Link>
+                            <Link
+                                href="/docs"
+                                target="_blank"
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="py-3 px-4 rounded-lg text-sm font-semibold hover:bg-white/5 transition-colors"
+                            >
+                                Docs
                             </Link>
                             <a
                                 href="#how-it-works"

@@ -8,7 +8,7 @@ import { ConnectModal } from "./ConnectModal";
 import { cn } from "@/lib/utils";
 import {
   Wallet, LogOut, Menu, X, User, LayoutDashboard,
-  ShoppingCart, Globe, ChevronDown, Check, AlertTriangle
+  ShoppingCart, Globe, ChevronDown, Check, AlertTriangle, Book
 } from "lucide-react";
 import { arcTestnet, datahaven } from "@/lib/chains";
 import { CartButton } from "./CartDrawer";
@@ -232,6 +232,25 @@ export function Navigation() {
                   pathname.includes("/dashboard") ? "w-full" : "w-0 group-hover:w-full"
                 )} />
               </Link>
+
+              {pathname === "/" && (
+                <Link
+                  href="/docs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  prefetch={false}
+                  className={cn(
+                    "relative py-2 transition-colors hover:text-primary group",
+                    pathname.includes("/docs") && "text-primary"
+                  )}
+                >
+                  Docs
+                  <span className={cn(
+                    "absolute bottom-0 left-0 h-0.5 bg-primary transition-all duration-300",
+                    pathname.includes("/docs") ? "w-full" : "w-0 group-hover:w-full"
+                  )} />
+                </Link>
+              )}
 
               <button
                 onClick={handleProfileClick}
