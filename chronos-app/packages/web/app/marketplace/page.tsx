@@ -21,6 +21,7 @@ import {
   Grid, List, SlidersHorizontal, ShoppingCart, Heart
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import BlobEffect from "@/components/BlobEffect";
 
 // --- Skeleton Card Component ---
 const SkeletonCard = memo(function SkeletonCard() {
@@ -848,19 +849,26 @@ export default function MarketplacePage() {
 
         {/* Hero */}
         <div className="flex flex-col lg:flex-row justify-between items-end gap-6 mb-10 border-b border-white/10 pb-8">
-          <div className="space-y-3 w-full lg:w-auto">
-            <div className="flex items-center gap-2 text-primary text-[10px] md:text-xs font-mono tracking-widest uppercase">
-              <span className="w-2 h-2 bg-primary rounded-full shadow-[0_0_10px_rgba(0,229,255,0.8)] animate-pulse" />
-              System Online
-              {isRefreshing && <RefreshCw size={10} className="animate-spin ml-2" />}
+          <div className="relative w-full lg:w-auto">
+            {/* Blob Effect strictly behind text, reduced scale, non-interactive */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-visible opacity-40">
+              <BlobEffect spread={60} blobSize={50} style={{ transform: 'scale(0.8)' }} />
             </div>
-            <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-white leading-none tracking-tighter">
-              ENCRYPTED <br className="md:hidden" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-cyan-400 to-secondary">ONEROAD</span>
-            </h1>
-            <p className="text-white/60 max-w-xl text-sm leading-relaxed">
-              Secure peer-to-peer file transfer protocol. Buy and sell encrypted digital assets.
-            </p>
+
+            <div className="relative z-10 space-y-3">
+              <div className="flex items-center gap-2 text-primary text-[10px] md:text-xs font-mono tracking-widest uppercase">
+                <span className="w-2 h-2 bg-primary rounded-full shadow-[0_0_10px_rgba(0,229,255,0.8)] animate-pulse" />
+                System Online
+                {isRefreshing && <RefreshCw size={10} className="animate-spin ml-2" />}
+              </div>
+              <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-white leading-none tracking-tighter">
+                ONEROAD <br className="md:hidden" />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-cyan-400 to-secondary">ENCRYPTION</span>
+              </h1>
+              <p className="text-white/60 max-w-xl text-sm leading-relaxed">
+                Secure peer-to-peer file transfer protocol. Buy and sell encrypted digital assets.
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-col w-full lg:w-auto gap-4">

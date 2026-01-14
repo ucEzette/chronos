@@ -1,0 +1,93 @@
+/* Blob Effect Styles */
+.blob-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    /* background: #121327; Removed to allow parent background or independent styling */
+    overflow: hidden;
+    filter: hue-rotate(0deg);
+    animation: huerot 5s ease infinite;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.glowy-blob {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    /* excessive filter to create the goo effect combined with SVG */
+    filter: url('#goo');
+}
+
+.blob-item {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 80px;
+    height: 80px;
+    background: #85EDE8;
+    border-radius: 50%;
+    box-shadow: 0px 0px 50px #85EDE8;
+    /* Use CSS variables for random positioning in animation */
+    animation: float 2.5s ease-in-out infinite;
+    /* Default delays and durations will be overridden by inline styles */
+    transform-origin: center;
+}
+
+/* Label Styling */
+.blob-label {
+    color: #85EDE8;
+    opacity: 0.5;
+    font-size: 24px;
+    font-family: 'Chewy', cursive;
+    /* Fallback font */
+    font-weight: bolder;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    position: absolute;
+    top: 30%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    user-select: none;
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* Animations */
+@keyframes huerot {
+    0% {
+        filter: hue-rotate(0deg);
+    }
+
+    100% {
+        filter: hue-rotate(360deg);
+    }
+}
+
+@keyframes float {
+    0% {
+        transform: translate(0, 0);
+    }
+
+    50% {
+        transform: translate(var(--tx), var(--ty));
+    }
+
+    100% {
+        transform: translate(0, 0);
+    }
+}
+
+@keyframes bounceback {
+    0% {
+        /* Current state is handled by JS requestAnimationFrame or simple transition, 
+       but here we just want it to snap back or transition back */
+    }
+
+    100% {
+        transform: translate(0, 0);
+        top: 0;
+        left: 0;
+    }
+}
