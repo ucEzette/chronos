@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Shield, Lock, Database, Globe, Wallet, FileKey, Download, CheckCircle } from "lucide-react";
+import { useScroll, useTransform, motion } from "framer-motion";
 import { Footer } from "@/components/Footer";
+import { KeySequence } from "@/components/KeySequence";
 
 // Top creators mock data
 const CREATORS = [
@@ -46,15 +48,36 @@ export default function LandingPage() {
     const [isLoaded, setIsLoaded] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+    // Scrollytelling Logic
+    const containerRef = useRef<HTMLDivElement>(null);
+    const { scrollYProgress } = useScroll({
+        target: containerRef,
+        offset: ["start start", "end end"]
+    });
+
+    const [progress, setProgress] = useState(0);
+
+    // Sync Framer Motion value to React state for the canvas component
+    useEffect(() => {
+        return scrollYProgress.on("change", (latest) => {
+            setProgress(latest);
+        });
+    }, [scrollYProgress]);
+
     useEffect(() => {
         setIsLoaded(true);
     }, []);
 
     return (
-        <div className="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-background">
-            {/* Video Background */}
-            <div className="fixed inset-0 z-0 overflow-hidden">
-                {/* Optimized background video with lazy loading */}
+        <div ref={containerRef} className="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-background">
+            {/* Scrollytelling Background */}
+            <KeySequence progress={progress} />
+
+            {/* Dark Overlay to make text readable over the 3D key */}
+            <div className="fixed inset-0 z-0 bg-background/80 pointer-events-none" />
+
+            {/* Video Background (Keeping it but lowering opacity significantly or removing if it clashes) */}
+            <div className="fixed inset-0 z-[-1] overflow-hidden opacity-20 mixed-blend-overlay">
                 <video
                     autoPlay
                     loop
@@ -63,11 +86,9 @@ export default function LandingPage() {
                     preload="metadata"
                     poster="/oneroad-logo.jpg"
                     className="absolute inset-0 w-full h-full object-cover"
-                    style={{ opacity: 0.5, filter: 'brightness(1.3) contrast(1.1)' }}
                 >
                     <source src="/oneway.webm" type="video/webm" />
                 </video>
-                <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/50 to-background" />
             </div>
 
             {/* Navigation */}
