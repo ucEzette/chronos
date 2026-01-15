@@ -11,11 +11,11 @@ interface KeySequenceProps {
 
 export function KeySequence({ progress }: KeySequenceProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const totalFrames = 240;
+    const totalFrames = 60;
 
-    // Helper to generate path: /sequence/oneroad-frame-001.jpg
+    // Helper to generate path: /sequence-60/frame-001.jpg
     const getPath = (index: number) =>
-        `/sequence/oneroad-frame-${index.toString().padStart(3, '0')}.jpg`;
+        `/sequence-60/frame-${index.toString().padStart(3, '0')}.jpg`;
 
     const { images, isLoading } = useImageSequence(totalFrames, getPath);
 

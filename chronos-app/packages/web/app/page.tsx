@@ -69,7 +69,7 @@ export default function LandingPage() {
 
     return (
         <div ref={containerRef} className="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-background">
-            {/* Scrollytelling Background */}
+            {/* Scrollytelling Background - Now uses 60 frames (mobile-safe) */}
             <KeySequence progress={progress} />
 
             {/* Dark Overlay to make text readable over the 3D key */}
