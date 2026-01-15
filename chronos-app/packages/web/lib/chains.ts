@@ -61,3 +61,51 @@ export const arbitrumSepolia = defineChain({
   },
   testnet: true,
 });
+
+// ====== CHAIN INFO UTILITIES ======
+
+export const CHAIN_INFO: Record<number, {
+  name: string;
+  shortName: string;
+  symbol: string;
+  color: string;
+  bgClass: string;
+}> = {
+  55931: {
+    name: "DataHaven Testnet",
+    shortName: "DH",
+    symbol: "MOCK",
+    color: "cyan",
+    bgClass: "bg-cyan-900/80 text-cyan-400 border-cyan-500/30"
+  },
+  5042002: {
+    name: "Arc Testnet",
+    shortName: "ARC",
+    symbol: "USDC",
+    color: "blue",
+    bgClass: "bg-blue-900/80 text-blue-400 border-blue-500/30"
+  },
+  421614: {
+    name: "Arbitrum Sepolia",
+    shortName: "ARB",
+    symbol: "ETH",
+    color: "orange",
+    bgClass: "bg-orange-900/80 text-orange-400 border-orange-500/30"
+  }
+};
+
+export function getChainName(chainId: number): string {
+  return CHAIN_INFO[chainId]?.name || `Chain ${chainId}`;
+}
+
+export function getChainShortName(chainId: number): string {
+  return CHAIN_INFO[chainId]?.shortName || "??";
+}
+
+export function getChainSymbol(chainId: number): string {
+  return CHAIN_INFO[chainId]?.symbol || "ETH";
+}
+
+export function getChainBadgeClass(chainId: number): string {
+  return CHAIN_INFO[chainId]?.bgClass || "bg-gray-900/80 text-gray-400 border-gray-500/30";
+}

@@ -308,15 +308,36 @@ export default function ItemDetailsPage() {
 
             <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded bg-blue-500/10 text-blue-400"><Globe size={20} /></div>
+                <div className={cn(
+                  "p-2 rounded",
+                  targetChainId === 55931 ? "bg-cyan-500/10 text-cyan-400" :
+                    targetChainId === 5042002 ? "bg-blue-500/10 text-blue-400" :
+                      "bg-orange-500/10 text-orange-400"
+                )}><Globe size={20} /></div>
                 <div>
                   <p className="text-xs text-gray-400 uppercase font-bold">Network</p>
-                  <p className="text-sm font-bold">{targetChainId === 55931 ? "DataHaven Testnet" : "Arc Testnet"}</p>
+                  <p className="text-sm font-bold">
+                    {targetChainId === 55931 ? "DataHaven Testnet" :
+                      targetChainId === 5042002 ? "Arc Testnet" :
+                        targetChainId === 421614 ? "Arbitrum Sepolia" : `Chain ${targetChainId}`}
+                  </p>
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-xs text-gray-400 uppercase font-bold">Contract</p>
-                <p className="text-sm font-mono text-primary truncate w-24">{contractAddr.slice(0, 6)}...{contractAddr.slice(-4)}</p>
+                <a
+                  href={
+                    targetChainId === 55931 ? `https://testnet.dhscan.io/address/${contractAddr}` :
+                      targetChainId === 5042002 ? `https://testnet.arcscan.app/address/${contractAddr}` :
+                        targetChainId === 421614 ? `https://sepolia.arbiscan.io/address/${contractAddr}` :
+                          `#`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-mono text-primary hover:underline truncate block"
+                >
+                  {contractAddr.slice(0, 6)}...{contractAddr.slice(-4)}
+                </a>
               </div>
             </div>
           </div>
