@@ -16,10 +16,10 @@ export const metadata: Metadata = {
   authors: [{ name: "ONEROAD" }],
   icons: {
     icon: [
-      { url: '/oneroad-logo.jpg', sizes: '32x32', type: 'image/jpeg' },
-      { url: '/oneroad-logo.jpg', sizes: '16x16', type: 'image/jpeg' },
+      { url: '/favicon.png', sizes: '64x64', type: 'image/png' },
+      { url: '/favicon.png', sizes: '32x32', type: 'image/png' },
     ],
-    shortcut: '/oneroad-logo.jpg',
+    shortcut: '/favicon.png',
     apple: '/oneroad-logo.jpg',
   },
   openGraph: {

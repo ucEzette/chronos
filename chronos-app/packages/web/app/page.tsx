@@ -73,7 +73,7 @@ export default function LandingPage() {
             <KeySequence progress={progress} />
 
             {/* Dark Overlay to make text readable over the 3D key */}
-            <div className="fixed inset-0 z-0 bg-background/80 pointer-events-none" />
+            <div className="fixed inset-0 z-0 bg-background/60 pointer-events-none" />
 
             {/* Navigation */}
             <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-background/90 backdrop-blur-md px-4 sm:px-6 md:px-16 py-3">
