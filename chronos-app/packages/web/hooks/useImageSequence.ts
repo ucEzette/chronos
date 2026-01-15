@@ -41,38 +41,54 @@ export function useImageSequence(
 
 
         const loadRemainingImages = async () => {
-            const promises = Array.from({ length: frameCount - 1 }).map((_, i) => {
-                return new Promise<void>((resolve) => {
-                    const actualIndex = i + 1; // Start from frame 2 (index 1)
-                    const img = new Image();
-                    img.src = basePath(actualIndex + 1);
-                    img.onload = () => {
-                        if (!mounted) return;
-                        loadedImages[actualIndex] = img;
-                        loadedCount++;
-                        setLoadProgress(loadedCount / frameCount);
-                        setImages([...loadedImages]); // Update state progressively
-                        resolve();
-                    };
-                    img.onerror = () => {
-                        console.error(`Failed to load image: ${img.src}`);
-                        if (!mounted) return;
-                        loadedCount++; // Still count as "attempted" for progress
-                        setLoadProgress(loadedCount / frameCount);
-                        resolve(); // Resolve anyway to avoid hanging
-                    };
-                });
-            });
+            const batchSize = 5;
+            const remainingIndices = Array.from({ length: frameCount - 1 }, (_, i) => i + 1);
 
-            await Promise.all(promises);
-            // After all promises resolve, ensure final state is consistent
+            for (let i = 0; i < remainingIndices.length; i += batchSize) {
+                if (!mounted) break;
+
+                const batch = remainingIndices.slice(i, i + batchSize);
+                const promises = batch.map(index => {
+                    return new Promise<void>((resolve) => {
+                        const img = new Image();
+                        img.src = basePath(index + 1);
+                        img.onload = () => {
+                            if (!mounted) return;
+                            loadedImages[index] = img;
+                            loadedCount++;
+                            // Only update progress state periodically to reduce re-renders
+                            if (loadedCount % 5 === 0 || loadedCount === frameCount) {
+                                setLoadProgress(loadedCount / frameCount);
+                                // For smoother performance, verify if we need to update 'images' state frequently
+                                // Updating it every batch is good compromise
+                                setImages([...loadedImages]);
+                            }
+                            resolve();
+                        };
+                        img.onerror = () => {
+                            console.error(`Failed to load image: ${img.src}`);
+                            if (!mounted) return;
+                            loadedCount++;
+                            setLoadProgress(loadedCount / frameCount);
+                            resolve();
+                        };
+                    });
+                });
+
+                // Wait for the current batch to finish before starting the next
+                // This prevents network saturation
+                await Promise.all(promises);
+
+                // Optional: Small delay to yield to main thread if needed
+                // await new Promise(r => setTimeout(r, 0));
+            }
+
             if (mounted) {
-                // If frameCount is 1, the above loop won't run, but the first image load handles it.
-                // If frameCount > 1, and all remaining images are loaded, ensure progress is 1.
+                // Ensure final state consistency
                 if (loadedCount === frameCount) {
                     setLoadProgress(1);
+                    setImages([...loadedImages]);
                 }
-                // If isLoading is still true (e.g., first image failed or frameCount was 0), set to false
                 setIsLoading(false);
             }
         };

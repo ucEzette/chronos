@@ -196,9 +196,8 @@ export function Navigation() {
               <img
                 src="/oneroad-logo.jpg"
                 alt="Oneroad Logo"
-                className="h-10 md:h-12 w-auto object-contain rounded-lg transition-all duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_8px_rgba(19,236,218,0.5)]"
+                className="h-20 md:h-24 w-auto object-contain rounded-xl shadow-lg transition-all duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_15px_rgba(19,236,218,0.5)]"
               />
-              <span className="hidden sm:block text-lg font-extrabold tracking-tight font-display">ONEROAD</span>
             </div>
 
             {/* Desktop Nav - Using Link for instant prefetched navigation */}

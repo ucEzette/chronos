@@ -97,11 +97,11 @@ export default function LandingPage() {
                         <Image
                             src="/oneroad-logo.jpg"
                             alt="Oneroad Logo"
-                            width={36}
-                            height={36}
-                            className="rounded-lg"
+                            width={80}
+                            height={80}
+                            className="rounded-xl shadow-lg"
+                            priority
                         />
-                        <span className="text-lg sm:text-xl font-extrabold tracking-tight font-display">ONEROAD</span>
                     </div>
 
                     {/* Desktop Nav */}
@@ -188,7 +188,7 @@ export default function LandingPage() {
             </header>
 
             {/* Hero Section */}
-            <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 md:px-16 pt-12 pb-24 relative z-10">
+            <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 md:px-16 pt-12 pb-24 relative z-30">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center min-h-[60vh]">
 
                     {/* Left: Hero Content */}

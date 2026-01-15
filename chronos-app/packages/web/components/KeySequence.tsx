@@ -84,7 +84,7 @@ export function KeySequence({ progress }: KeySequenceProps) {
         <div className="fixed inset-0 z-0 pointer-events-none">
             <canvas
                 ref={canvasRef}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover pointer-events-none"
             />
             {isLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black">
