@@ -193,11 +193,7 @@ export default function LandingPage() {
 
                     {/* Left: Hero Content */}
                     <div className={`flex flex-col gap-6 sm:gap-8 transition-all duration-700 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-                        {/* Status Badge */}
-                        <div className="status-badge w-fit">
-                            <span className="status-dot" />
-                            Testnet Live
-                        </div>
+
 
                         {/* Main Heading */}
                         <h1 className="text-4xl sm:text-5xl md:text-7xl font-black leading-[1.1] tracking-tight font-display">
