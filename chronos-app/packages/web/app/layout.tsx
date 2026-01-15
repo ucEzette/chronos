@@ -26,6 +26,20 @@ export const metadata: Metadata = {
     title: "ONEROAD | Decentralized Digital Marketplace",
     description: "Secure peer-to-peer encrypted file trading on the blockchain.",
     type: "website",
+    images: [
+      {
+        url: '/oneroad-logo.jpg',
+        width: 512,
+        height: 512,
+        alt: 'ONEROAD Logo',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary',
+    title: 'ONEROAD | Decentralized Digital Marketplace',
+    description: 'Secure peer-to-peer encrypted file trading on the blockchain.',
+    images: ['/oneroad-logo.jpg'],
   },
 };
 
