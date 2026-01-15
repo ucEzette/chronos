@@ -122,7 +122,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="flex flex-col md:flex-row items-center justify-between pt-8 border-t border-white/10 gap-4">
           <p className="text-slate-600 text-[10px] uppercase font-bold tracking-[0.15em]">
-            © 2024 Oneroad Protocol. All rights reserved.
+            © 2026 Oneroad Protocol. All rights reserved.
           </p>
           <div className="flex gap-6 text-[10px] uppercase font-bold tracking-[0.15em] text-slate-600">
             <a href="#" className="hover:text-slate-300 transition-colors">Privacy Policy</a>
