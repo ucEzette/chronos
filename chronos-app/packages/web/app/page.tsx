@@ -60,22 +60,8 @@ export default function LandingPage() {
     // This makes the key unlock/explode faster as you scroll.
     const progress = useTransform(scrollYProgress, [0, 0.6], [0, 1]);
 
-    // We can pass the motion value directly if the component supports it, 
-    // but our KeySequence expects a number. We need to sync it.
-    // However, syncing via state causes re-renders. 
-    // Best practice for performance: Pass the MotionValue to KeySequence and handle subscription there?
-    // OR just use the state sync for simplicity if performance is okay. 
-    // Given "make it fast", let's optimize:
-    // We'll pass the raw number via state but use a specialized hook or ref in KeySequence if needed.
-    // For now, let's Stick to the state sync but strictly clamp it.
-
-    const [progressValue, setProgressValue] = useState(0);
-
-    useEffect(() => {
-        return progress.on("change", (latest) => {
-            setProgressValue(latest);
-        });
-    }, [progress]);
+    // We pass the MotionValue directly to avoid re-renders on every scroll tick.
+    // The KeySequence component handles subscription internally.
 
     useEffect(() => {
         setIsLoaded(true);
@@ -84,7 +70,7 @@ export default function LandingPage() {
     return (
         <div ref={containerRef} className="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-background">
             {/* Scrollytelling Background */}
-            <KeySequence progress={progressValue} />
+            <KeySequence progress={progress} />
 
             {/* Dark Overlay to make text readable over the 3D key */}
             <div className="fixed inset-0 z-0 bg-background/80 pointer-events-none" />
