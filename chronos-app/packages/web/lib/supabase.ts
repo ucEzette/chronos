@@ -18,6 +18,12 @@ let _supabase: SupabaseClient | null = null;
 
 if (isSupabaseConfigured()) {
     _supabase = createClient(supabaseUrl!, supabaseAnonKey!, {
+        auth: {
+            flowType: 'implicit',
+            autoRefreshToken: true,
+            persistSession: true,
+            detectSessionInUrl: false,
+        },
         realtime: {
             params: {
                 eventsPerSecond: 10,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useImageSequence } from "@/hooks/useImageSequence";
 
 import { MotionValue } from "framer-motion";
@@ -11,11 +11,11 @@ interface KeySequenceProps {
 
 export function KeySequence({ progress }: KeySequenceProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const totalFrames = 60;
+    const totalFrames = 56;
 
-    // Helper to generate path: /sequence-60/frame-001.jpg
-    const getPath = (index: number) =>
-        `/sequence-60/frame-${index.toString().padStart(3, '0')}.jpg`;
+    // Memoize the path generator to prevent re-triggering the hook
+    const getPath = useCallback((index: number) =>
+        `/sequenceNW/frame-${index.toString().padStart(3, '0')}.webp`, []);
 
     const { images, isLoading } = useImageSequence(totalFrames, getPath);
 
